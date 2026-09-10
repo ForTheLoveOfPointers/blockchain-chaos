@@ -1,0 +1,20 @@
+[package]
+name = "chain-chaos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Chaos testing for blockchain infrastructure — CLI."
+
+[[bin]]
+name = "chain-chaos"
+path = "src/main.rs"
+
+[dependencies]
+chain-chaos-proxy = { path = "../proxy" }
+tokio.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
