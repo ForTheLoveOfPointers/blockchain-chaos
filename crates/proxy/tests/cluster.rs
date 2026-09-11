@@ -1,8 +1,5 @@
-//! End-to-end multi-provider test: two providers front the same node, one
-//! healthy and one with a stale-head fault, and the cluster reports divergent
-//! heads for the same chain.
-//!
-//! Skips (does not fail) when `anvil` is not installed, so it stays CI-friendly.
+//! End-to-end multi-provider test: two providers front one node, one healthy and
+//! one stale, and the cluster reports divergent heads. Skips if anvil is absent.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;

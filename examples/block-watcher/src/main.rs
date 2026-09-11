@@ -1,9 +1,5 @@
-//! `block-watcher` — example app. Polls the head and logs it forever.
-//!
-//!   block-watcher --rpc-url http://127.0.0.1:8545 --interval 1s
-//!
-//! Point it at a chain-chaos proxy instead of the node to watch it survive
-//! injected RPC faults.
+//! block-watcher example. Polls the head and logs it. Point it at a chain-chaos
+//! proxy to watch it survive injected RPC faults.
 
 use std::time::Duration;
 

@@ -1,9 +1,5 @@
-//! End-to-end chain-fault test: a stale-head rule makes the proxy report a head
-//! behind the real one.
-//!
-//! Anvil mines a block every second; a `stale_head = 3` rule rewrites the
-//! `eth_blockNumber` response on the way back. Skips (does not fail) when
-//! `anvil` is not installed, so it stays CI-friendly.
+//! End-to-end stale-head test against a live anvil node: the proxy reports a head
+//! behind the real one. Skips if anvil is absent.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;

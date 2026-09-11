@@ -1,10 +1,5 @@
-//! Runtime fault types: the matcher (which requests a rule applies to), the
-//! action (what to do), and the matching logic.
-//!
-//! These are the validated, typed counterparts of the wire types in
-//! [`super::config`]. No `Option`s standing in for defaults, no un-parsed
-//! duration strings, no out-of-range probabilities — the compile step in
-//! `config` guarantees all of that, so the hot path in [`super`] stays simple.
+//! Runtime fault types: the matcher, the action, and the matching logic. These
+//! are the validated counterparts of the wire types in [`super::config`].
 
 use std::time::Duration;
 

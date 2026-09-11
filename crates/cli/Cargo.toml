@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Chaos testing for blockchain infrastructure — CLI."
+description = "Chaos testing for blockchain infrastructure. Command-line interface."
 
 [[bin]]
 name = "chain-chaos"

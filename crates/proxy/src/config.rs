@@ -1,8 +1,5 @@
-//! Proxy configuration.
-//!
-//! Phase 1 keeps this intentionally small: an upstream to forward to and an
-//! address to listen on. A TOML file may supply defaults; explicit CLI values
-//! override it. Everything fault-related lands here in later phases.
+//! Proxy configuration: the upstream to forward to, the address to listen on,
+//! and any static fault rules. A TOML file supplies defaults; CLI values win.
 
 use std::net::SocketAddr;
 

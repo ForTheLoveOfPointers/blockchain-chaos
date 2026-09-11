@@ -1,13 +1,6 @@
-//! WebSocket JSON-RPC pass-through, with connection-level faults.
-//!
-//! The client upgrades against us; we open an upstream WS and relay frames in
-//! both directions. Relaying whole frames keeps subscriptions (`newHeads`,
-//! `logs`) transparent and preserves ids without response-matching.
-//!
-//! Injects two connection-level faults here: a scheduled disconnect
-//! (`ws_disconnect_after`) and per-message client-to-upstream latency. Anything
-//! that must target a *specific method's response* needs the id-matching we
-//! deliberately avoid, so it waits for the EVM-aware phase.
+//! WebSocket JSON-RPC pass-through: relay whole frames both ways so subscriptions
+//! stay transparent. Injects connection-level faults (scheduled disconnect,
+//! client-to-upstream latency) and rewrites newHeads during a reorg.
 
 use std::future::pending;
 

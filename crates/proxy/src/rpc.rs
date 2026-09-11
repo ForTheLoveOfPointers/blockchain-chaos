@@ -1,9 +1,6 @@
-//! Lightweight, read-only views over JSON-RPC payloads.
-//!
-//! IMPORTANT: these are used for *logging only*. The proxy forwards the original
-//! request/response bytes untouched, which is what guarantees the JSON-RPC `id`
-//! (number, string, or null) is preserved exactly. Never forward a re-serialized
-//! value produced from these views.
+//! Read-only views over JSON-RPC payloads, for logging only. The proxy forwards
+//! the original bytes untouched, so the `id` is preserved exactly. Never send a
+//! value re-serialized from one of these.
 
 use serde_json::Value;
 

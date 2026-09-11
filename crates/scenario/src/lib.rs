@@ -1,11 +1,6 @@
-//! Deterministic scenario engine for chain-chaos (Phase 3).
-//!
-//! Turns individual transport faults into a reproducible, time-ordered
-//! experiment: a YAML [`Scenario`] compiles into a [`Timeline`] of active
-//! rule-set transitions, and [`drive`] swaps a live [`chain_chaos_proxy`] fault
-//! engine's rules as wall-clock time advances. The engine is deliberately
-//! independent of EVM semantics — it schedules the transport faults the proxy
-//! already understands.
+//! Deterministic scenario engine. A YAML [`Scenario`] compiles into a [`Timeline`]
+//! of rule-set transitions, and [`drive`] swaps the live fault engine's rules as
+//! wall-clock time advances.
 
 pub mod config;
 pub mod timeline;

@@ -9,12 +9,12 @@
 
 seed = 424242   # cluster-wide default; a provider may set its own under [faults]
 
-# Healthy provider — plain pass-through, no faults.
+# Healthy provider: plain pass-through, no faults.
 [providers.alchemy]
 upstream = "http://127.0.0.1:8545"
 listen   = "127.0.0.1:9001"
 
-# Lagging provider — reports a head 3 blocks behind the others.
+# Lagging provider: reports a head 3 blocks behind the others.
 [providers.infura]
 upstream = "http://127.0.0.1:8545"
 listen   = "127.0.0.1:9002"
@@ -22,7 +22,7 @@ listen   = "127.0.0.1:9002"
 [[providers.infura.faults.rules]]
 stale_head = 3
 
-# Flaky provider — 25% of requests time out after 5s, emulating an outage.
+# Flaky provider: 25% of requests time out after 5s, emulating an outage.
 [providers.quicknode]
 upstream = "http://127.0.0.1:8545"
 listen   = "127.0.0.1:9003"

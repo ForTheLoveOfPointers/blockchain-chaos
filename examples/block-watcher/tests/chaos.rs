@@ -1,14 +1,6 @@
-//! End-to-end chaos test: the whole product wired together.
-//!
-//!   anvil  <--  chain-chaos proxy (scenario-driven)  <--  block-watcher
-//!
-//! A scenario rejects every `eth_blockNumber` for the first second, then
-//! recovers. The watcher must survive the outage (counting errors, never
-//! crashing) and, once the fault clears, catch back up to anvil's real head.
-//! This is the roadmap's `eventual_recovery` + `canonical_block_sequence`
-//! assertions in miniature.
-//!
-//! Skips (does not fail) if `anvil` is not installed, so it stays CI-friendly.
+//! End-to-end chaos test: anvil, then a scenario-driven proxy, then block-watcher.
+//! The scenario rejects `eth_blockNumber` for one second; the watcher survives and
+//! catches back up to the real head. Skips if anvil is absent.
 
 use std::process::{Command, Stdio};
 use std::sync::Arc;

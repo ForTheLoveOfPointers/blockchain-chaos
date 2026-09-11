@@ -1,11 +1,6 @@
-//! Compile a [`Scenario`] into a runnable [`Timeline`], and drive a live
-//! [`FaultEngine`] through it over wall-clock time.
-//!
-//! The timeline is a list of ordered [`Step`]s, one per distinct trigger offset.
-//! Each step holds the *cumulative* active rule set at that moment: faults added
-//! by earlier events stay active until a `recover` clears them. The driver then
-//! only has to `set_rules(step.active)` at each offset — it carries no state of
-//! its own, which keeps replay deterministic.
+//! Compile a scenario into a timeline and drive a live [`FaultEngine`] through it.
+//! Each step holds the cumulative active rule set; faults stay until a `recover`
+//! clears them, so the driver keeps no state and replays deterministically.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -96,7 +91,7 @@ impl Timeline {
     pub fn describe(&self) -> String {
         let mut out = format!("scenario: {}\nseed: {}\n", self.name, self.seed);
         if self.steps.is_empty() {
-            out.push_str("  (no events — pure pass-through)\n");
+            out.push_str("  (no events, pure pass-through)\n");
         }
         for step in &self.steps {
             out.push_str(&format!(

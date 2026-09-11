@@ -18,7 +18,7 @@ impl AppState {
     pub fn new(cfg: ProxyConfig) -> anyhow::Result<Self> {
         let fault = Arc::new(cfg.faults.clone().compile()?);
         if fault.is_empty() {
-            info!(target: "chain_chaos", "no fault rules — running as pass-through");
+            info!(target: "chain_chaos", "no fault rules, running as pass-through");
         } else {
             info!(
                 target: "chain_chaos",

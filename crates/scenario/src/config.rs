@@ -1,13 +1,5 @@
-//! Serde/wire types for the YAML scenario format.
-//!
-//! A scenario is a name, an optional seed, and a list of time-triggered events.
-//! Each event fires at `startup` or `after: <duration>` and carries exactly one
-//! action. Actions map onto the proxy's transport faults (delay, timeout,
-//! reject, drop, ws-disconnect) plus `recover`, which returns to healthy
-//! pass-through.
-//!
-//! These are the *only* types that know YAML field names; [`super::timeline`]
-//! validates and lowers them into runnable [`chain_chaos_proxy::fault::Rule`]s.
+//! Wire types for the YAML scenario format: a name, a seed, and time-triggered
+//! events, each carrying one action. The only place that knows YAML field names.
 
 use serde::Deserialize;
 

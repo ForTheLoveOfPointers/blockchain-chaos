@@ -1,14 +1,6 @@
-//! A minimal EVM block watcher — the first example application for chain-chaos.
-//!
-//! It does the smallest useful thing: poll `eth_blockNumber` on an interval,
-//! track the head, and notice when the head jumps (a gap) or moves backwards (a
-//! possible reorg). Crucially, it is *resilient*: an RPC failure is counted and
-//! the next tick retries, rather than crashing the watcher. That resilience is
-//! exactly what chain-chaos exists to test — point this at a faulted proxy and
-//! assert it still converges on the true head.
-//!
-//! Deliberately HTTP-polling (not WebSocket subscriptions) to keep the example
-//! and its chaos test simple and deterministic.
+//! A minimal EVM block watcher: poll `eth_blockNumber`, track the head, and flag
+//! gaps or backward jumps. An RPC failure is counted and retried, not fatal, which
+//! is the resilience chain-chaos exists to test. HTTP polling by design.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

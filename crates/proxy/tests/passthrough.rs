@@ -1,9 +1,5 @@
-//! Anvil-backed integration test: the proxy must be transparent.
-//!
-//! Spawns a local Anvil node, runs the proxy in front of it, and asserts that
-//! responses through the proxy match talking to the node directly, that batch
-//! requests round-trip, and that JSON-RPC ids are preserved. Skips (does not
-//! fail) if `anvil` is not installed, so it stays CI-friendly.
+//! Anvil-backed test that the proxy is transparent: responses, batches, and ids
+//! match talking to the node directly. Skips if anvil is absent.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;

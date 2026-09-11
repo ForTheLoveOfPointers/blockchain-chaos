@@ -1,10 +1,5 @@
-//! Serde/wire types for fault configuration, and the step that compiles them
-//! into the runtime [`super::rule`] types.
-//!
-//! Deserialized from the `[faults]` section of the proxy TOML. Kept separate
-//! from the runtime engine so the on-disk format can change independently: this
-//! is the *only* place that knows about TOML field names and humantime strings.
-//! Everything handed to [`super::rule`] is already validated and typed.
+//! Wire types for the `[faults]` TOML, and the step that compiles them into the
+//! runtime [`super::rule`] types. The only place that knows TOML field names.
 
 use std::time::Duration;
 

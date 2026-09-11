@@ -1,10 +1,6 @@
-//! HTTP JSON-RPC pass-through, with Phase 2 fault injection.
-//!
-//! A single POST choke point forwards the raw request body to the upstream and
-//! returns the upstream's raw response. Because the bytes are never rewritten on
-//! the pass-through path, JSON-RPC ids and batch ordering are preserved exactly.
-//! `forward` first consults the fault engine; only faulted requests get a
-//! synthesized response (whose ids we *do* build from the parsed view).
+//! HTTP JSON-RPC pass-through. One POST forwards the raw body upstream and returns
+//! the raw response, so ids and batch order survive. The fault engine runs before
+//! forwarding and can rewrite the response after.
 
 use axum::{
     body::Bytes,

@@ -1,17 +1,6 @@
-//! Anvil-backed integration test: the WebSocket disconnect fault.
-//!
-//! `ws_disconnect_after` is a connection-level fault: it is decided once, at
-//! upgrade time, against `RpcView::Unknown` (no method is known yet), so only a
-//! rule with no method filter and transport `ws`/`both` can match. This test
-//! opens a real WS client through the proxy, verifies normal pass-through first,
-//! then asserts the proxy tears the connection down at roughly the configured
-//! deadline.
-//!
-//! It must be Anvil-backed, not hermetic: `ws::relay` opens the upstream WS with
-//! `connect_async` *before* the disconnect matters, so a black-hole upstream
-//! would fail the connect and never reach the disconnect logic.
-//!
-//! Skips (does not fail) if `anvil` is not installed, so it stays CI-friendly.
+//! Anvil-backed test for the WebSocket disconnect fault: pass-through works, then
+//! the proxy tears the connection down near the deadline. Anvil-backed because the
+//! relay dials the upstream before the disconnect matters. Skips if anvil is absent.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;

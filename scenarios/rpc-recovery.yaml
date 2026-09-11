@@ -33,6 +33,6 @@ events:
       code: -32005
       message: rate limited
 
-  # 15s in, everything recovers — back to healthy pass-through.
+  # 15s in, everything recovers, back to healthy pass-through.
   - after: 15s
     recover: true

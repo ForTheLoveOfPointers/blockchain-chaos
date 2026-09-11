@@ -1,8 +1,5 @@
-//! End-to-end fault-injection tests through the real router.
-//!
-//! These drive the assembled `AppState` + router, so they exercise the config
-//! -> engine -> choke-point path exactly as production does. A `reject` rule
-//! never forwards upstream, so these need no Anvil and stay fully hermetic.
+//! End-to-end fault-injection tests through the real router. A `reject` rule never
+//! forwards upstream, so these need no anvil and stay hermetic.
 
 use std::time::Instant;
 

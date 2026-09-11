@@ -1,10 +1,6 @@
-//! `chain-chaos` proxy library.
-//!
-//! Transparent HTTP + WebSocket JSON-RPC proxy that sits between an EVM
-//! application and a real RPC endpoint. With no fault rules it forwards traffic
-//! unchanged while logging it. With them it adds transport fault injection:
-//! the [`fault`] engine is consulted at the single forwarding choke point in
-//! [`http`]/[`ws`], and only faulted requests deviate from pass-through.
+//! Transparent HTTP and WebSocket JSON-RPC proxy between an EVM app and its RPC
+//! endpoint. With no rules it forwards traffic untouched; the fault engine only
+//! changes the requests it matches.
 
 pub mod cluster;
 pub mod config;

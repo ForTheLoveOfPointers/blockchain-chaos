@@ -1,24 +1,8 @@
-//! Faithful reorg modelling (Phase 6).
-//!
-//! A reorg is the one chain fault that needs cross-request state: the fork point
-//! must stay pinned for the life of the reorg so every rewritten block, log, and
-//! header chains onto the *same* alternative branch. The model presents a
-//! same-height replacement — blocks `fork+1..=fork+depth` keep their numbers but
-//! take new, deterministically derived hashes and a re-linked parent chain — so
-//! an indexer that tracks block *hashes* detects a reorg of the configured depth
-//! while one that only tracks numbers silently corrupts. The block just above
-//! the branch (`fork+depth+1`) has its `parentHash` re-pointed onto the alt tip,
-//! so a consumer walking parent links from the head sees one consistent history.
-//!
-//! Everything is synthesized by rewriting the upstream's *own* responses, so the
-//! alternative blocks are the real blocks with a rewritten identity (new hash,
-//! re-linked parent, optionally emptied transactions and removed logs) — faithful
-//! to what a same-height reorg produces without simulating consensus. The fork is
-//! pinned lazily from the first observed head (`eth_blockNumber` or a `newHeads`
-//! notification); block, log, and receipt responses are left untouched until then,
-//! which is why the shared-RNG single-client ordering caveat in [`super`] applies.
-//! On `recover` the rule leaves the active set, this model is dropped, and the
-//! real hashes flow again — the convergence half of the experiment.
+//! Reorg fault. Rewrites the top N blocks at the same heights with new hashes and
+//! a re-linked parent chain, removes their logs, and drops their transactions,
+//! over HTTP and newHeads. An indexer that tracks hashes detects it; one that
+//! tracks only numbers does not. The fork point is pinned from the first observed
+//! head and held in an `Arc` so it survives the window; `recover` restores reality.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

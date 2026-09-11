@@ -1,12 +1,6 @@
-//! Multi-provider chaos (Phase 5).
-//!
-//! Models an application that talks to several RPC providers at once by running
-//! one independent proxy per provider. Each provider has its own upstream,
-//! listen address, and fault set, so a config can make provider A report a stale
-//! head while B suffers an outage and C stays healthy — which is what exercises
-//! an application's failover and provider-disagreement logic. Providers share
-//! nothing but the process: each is the same single-upstream proxy the rest of
-//! the crate already builds, so no fault, scenario, or transport code changes.
+//! Multi-provider chaos: one independent proxy per RPC provider, each with its own
+//! upstream and fault set, so they can disagree. Each provider is just the
+//! single-upstream proxy; the cluster only spawns and joins several.
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;

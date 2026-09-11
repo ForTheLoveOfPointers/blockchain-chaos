@@ -1,11 +1,4 @@
-//! `chain-chaos` command-line entrypoint.
-//!
-//! Subcommands:
-//! - `proxy` — transparent HTTP + WebSocket pass-through, with optional static
-//!   fault rules from a TOML `--config`.
-//! - `run` — drive the proxy through a deterministic YAML scenario, injecting
-//!   faults that change over wall-clock time.
-//! - `inspect` — compile a scenario and print its timeline without running it.
+//! `chain-chaos` command-line entrypoint: `proxy`, `run`, `cluster`, `inspect`.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

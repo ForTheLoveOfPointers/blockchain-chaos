@@ -1,9 +1,6 @@
-//! End-to-end reorg test: a depth-2 reorg rule makes the proxy present the top
-//! two blocks with new hashes and a re-linked parent chain, while leaving blocks
-//! below the fork point untouched — the same-height replacement an indexer must
-//! detect by hash.
-//!
-//! Skips (does not fail) when `anvil` is not installed, so it stays CI-friendly.
+//! End-to-end reorg test: the proxy presents the top blocks with new hashes and a
+//! re-linked parent chain, leaving blocks below the fork untouched. Skips if anvil
+//! is absent.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;

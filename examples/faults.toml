@@ -17,7 +17,7 @@ name    = "slow getLogs"
 methods = ["eth_getLogs"]
 delay   = "2s"
 
-# Half of eth_call requests get 100ms–1.5s of jitter.
+# Half of eth_call requests get 100ms to 1.5s of jitter.
 [[faults.rules]]
 methods     = ["eth_call"]
 probability = 0.5

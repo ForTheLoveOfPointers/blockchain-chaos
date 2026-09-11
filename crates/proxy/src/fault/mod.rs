@@ -1,34 +1,7 @@
-//! Transport fault injection.
-//!
-//! This module is the fault engine that the two forwarding choke points
-//! ([`crate::http::forward`] and [`crate::ws`] relay) consult before touching
-//! the upstream. Layout:
-//!
-//! - [`config`] — serde/wire types deserialized from the proxy TOML, plus the
-//!   step that compiles them into the runtime engine. Keep the wire format here
-//!   so it can evolve without disturbing the hot path.
-//! - [`rule`] — the runtime matcher/action types and the matching logic.
-//! - [`rng`] — the seeded, deterministic RNG.
-//!
-//! The engine runs in two phases. [`FaultEngine::decide`] runs *before*
-//! forwarding and turns a [`FaultContext`] into a [`FaultDecision`] for
-//! request-side transport faults (delay, timeout, reject, drop, ws-disconnect).
-//! [`FaultEngine::intercept`] runs *after* forwarding and rewrites the upstream
-//! response for chain-aware faults (stale head, missing logs, malformed, reorg).
-//! Each rule belongs to exactly one phase, distinguished by
-//! [`Action::is_response`], so a rule's probability is rolled once in the phase
-//! that owns it.
-//!
-//! Most chain-aware faults read and rewrite the JSON-RPC result but hold no
-//! cross-request state. The [`reorg`] fault is the exception: it carries an
-//! `Arc`-shared model so the fork point stays pinned across a reorg window, and
-//! the WS relay consults [`FaultEngine::active_reorg`] to rewrite `newHeads`
-//! frames the same way.
-//!
-//! Determinism caveat: the RNG is a single shared stream, so under concurrent
-//! requests the *order* of draws is not deterministic and exact replays can
-//! diverge. This is fine for single-client tests; a keyed per-request RNG is
-//! the real fix.
+//! The fault engine. `decide` runs before forwarding for transport faults;
+//! `intercept` runs after for response-rewriting chain faults. Each rule belongs
+//! to one phase. All randomness is one seeded stream, so replays are exact for a
+//! single client but not under concurrency.
 
 pub mod config;
 pub mod reorg;
