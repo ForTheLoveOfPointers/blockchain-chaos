@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/proxy", "crates/cli"]
+members = ["crates/proxy", "crates/scenario", "crates/cli"]
 
 [workspace.package]
 version = "0.0.1"
@@ -28,6 +28,7 @@ url = "2"
 humantime = "2"
 rand = "0.10"
 rand_chacha = "0.10"
+serde_yaml = "0.9"
 
 [profile.release]
 lto = "thin"

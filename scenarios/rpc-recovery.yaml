@@ -1,0 +1,38 @@
+# A deterministic RPC-degradation experiment.
+#
+#   chain-chaos run scenarios/rpc-recovery.yaml --upstream http://127.0.0.1:8545
+#
+# Point your application at the proxy's listen address. Faults change over time
+# exactly as scheduled below; every decision derives from `seed`, so a run
+# reproduces exactly. Inspect the timeline without running:
+#
+#   chain-chaos inspect scenarios/rpc-recovery.yaml
+
+name: rpc-recovery
+seed: 12345
+
+events:
+  # From the start, every eth_getLogs is slow.
+  - at: startup
+    delay:
+      methods: [eth_getLogs]
+      duration: 3s
+
+  # 5s in, tear down WebSocket subscriptions shortly after they connect, to
+  # exercise the application's reconnect handling.
+  - after: 5s
+    disconnect:
+      after: 500ms
+
+  # 8s in, half of transaction submissions are rate-limited (HTTP 429).
+  - after: 8s
+    reject:
+      methods: [eth_sendRawTransaction]
+      probability: 0.5
+      http_status: 429
+      code: -32005
+      message: rate limited
+
+  # 15s in, everything recovers — back to healthy pass-through.
+  - after: 15s
+    recover: true

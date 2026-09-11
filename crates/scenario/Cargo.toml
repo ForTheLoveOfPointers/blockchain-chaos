@@ -1,0 +1,21 @@
+[package]
+name = "chain-chaos-scenario"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Deterministic YAML scenario engine for chain-chaos: time-ordered fault experiments."
+
+[lib]
+name = "chain_chaos_scenario"
+path = "src/lib.rs"
+
+[dependencies]
+chain-chaos-proxy = { path = "../proxy" }
+tokio.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+humantime.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
