@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/proxy", "crates/scenario", "crates/cli"]
+members = ["crates/proxy", "crates/scenario", "crates/cli", "examples/block-watcher"]
 
 [workspace.package]
 version = "0.0.1"
