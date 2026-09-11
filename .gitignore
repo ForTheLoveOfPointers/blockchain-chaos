@@ -3,4 +3,6 @@
 Cargo.lock.orig
 .DS_Store
 *.log
+personal
+*.txt
 /failure/

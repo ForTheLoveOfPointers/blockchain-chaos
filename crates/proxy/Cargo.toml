@@ -25,6 +25,9 @@ thiserror.workspace = true
 futures-util.workspace = true
 bytes.workspace = true
 url.workspace = true
+humantime.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

@@ -1,11 +1,13 @@
 //! `chain-chaos` proxy library.
 //!
-//! Phase 1: a transparent HTTP + WebSocket JSON-RPC pass-through proxy. It sits
-//! between an EVM application and a real RPC endpoint and forwards traffic
-//! unchanged while logging it. No faults are injected yet — that is Phase 2,
-//! and it plugs into the single forwarding choke point in [`http`]/[`ws`].
+//! Transparent HTTP + WebSocket JSON-RPC proxy that sits between an EVM
+//! application and a real RPC endpoint. With no fault rules it forwards traffic
+//! unchanged while logging it. With them it adds transport fault injection:
+//! the [`fault`] engine is consulted at the single forwarding choke point in
+//! [`http`]/[`ws`], and only faulted requests deviate from pass-through.
 
 pub mod config;
+pub mod fault;
 pub mod http;
 pub mod rpc;
 pub mod state;
@@ -15,7 +17,7 @@ use axum::{routing::post, Router};
 use tokio::net::TcpListener;
 use tracing::info;
 
-pub use config::{ProxyConfig, ConfigError, FileConfig};
+pub use config::{ConfigError, FileConfig, ProxyConfig};
 pub use state::AppState;
 
 pub fn router(state: AppState) -> Router {
@@ -25,11 +27,15 @@ pub fn router(state: AppState) -> Router {
 }
 
 pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
-    let listen = cfg.listen;
-    let upstream_http = cfg.upstream_http.clone();
-    let upstream_ws = cfg.upstream_ws.clone();
-
     let state = AppState::new(cfg)?;
+    serve(state).await
+}
+
+pub async fn serve(state: AppState) -> anyhow::Result<()> {
+    let listen = state.cfg.listen;
+    let upstream_http = state.cfg.upstream_http.clone();
+    let upstream_ws = state.cfg.upstream_ws.clone();
+
     let app = router(state);
 
     let listener = TcpListener::bind(listen).await?;
@@ -38,7 +44,7 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
         %listen,
         %upstream_http,
         %upstream_ws,
-        "chain-chaos proxy listening (pass-through mode, no faults)"
+        "chain-chaos proxy listening"
     );
 
     axum::serve(listener, app)

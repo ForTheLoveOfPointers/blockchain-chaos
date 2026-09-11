@@ -1,9 +1,15 @@
-//! WebSocket JSON-RPC pass-through.
+//! WebSocket JSON-RPC pass-through, with connection-level faults.
 //!
 //! The client upgrades against us; we open an upstream WS and relay frames in
-//! both directions. Relaying whole frames makes subscriptions (`newHeads`,
-//! `logs`) transparent for free and preserves ids without response-matching —
-//! that matching only becomes necessary once Phase 2 reorders/delays frames.
+//! both directions. Relaying whole frames keeps subscriptions (`newHeads`,
+//! `logs`) transparent and preserves ids without response-matching.
+//!
+//! Injects two connection-level faults here: a scheduled disconnect
+//! (`ws_disconnect_after`) and per-message client-to-upstream latency. Anything
+//! that must target a *specific method's response* needs the id-matching we
+//! deliberately avoid, so it waits for the EVM-aware phase.
+
+use std::future::pending;
 
 use axum::{
     extract::{
@@ -13,9 +19,11 @@ use axum::{
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
+use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::Message as TungMsg;
 use tracing::{info, warn};
 
+use crate::fault::{FaultContext, FaultDecision, Transport};
 use crate::rpc::RpcView;
 use crate::state::AppState;
 
@@ -38,12 +46,30 @@ async fn relay(state: AppState, client: WebSocket) -> anyhow::Result<()> {
 
     let log_bodies = state.cfg.log_bodies;
 
+    let disconnect_at = match state.fault.decide(&FaultContext {
+        transport: Transport::Ws,
+        view: &RpcView::Unknown,
+    }) {
+        FaultDecision::WsDisconnect(d) => {
+            info!(target: "chain_chaos::fault", after_ms = d.as_millis(), "scheduling websocket disconnect");
+            Some(Instant::now() + d)
+        }
+        _ => None,
+    };
+
     loop {
         tokio::select! {
+            _ = disconnect_deadline(disconnect_at) => {
+                info!(target: "chain_chaos::fault", "injecting websocket disconnect");
+                let _ = client_tx.send(AxumMsg::Close(None)).await;
+                let _ = up_tx.send(TungMsg::Close(None)).await;
+                break;
+            }
             incoming = client_rx.next() => {
                 match incoming {
                     Some(Ok(msg)) => {
                         log_client_msg(&msg, log_bodies);
+                        maybe_delay_client_msg(&state, &msg).await;
                         if matches!(msg, AxumMsg::Close(_)) {
                             let _ = up_tx.send(TungMsg::Close(None)).await;
                             break;
@@ -89,6 +115,27 @@ async fn relay(state: AppState, client: WebSocket) -> anyhow::Result<()> {
     let _ = client_tx.close().await;
     info!(target: "chain_chaos::ws", "ws relay closed");
     Ok(())
+}
+
+async fn disconnect_deadline(deadline: Option<Instant>) {
+    match deadline {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => pending::<()>().await,
+    }
+}
+
+async fn maybe_delay_client_msg(state: &AppState, msg: &AxumMsg) {
+    let AxumMsg::Text(t) = msg else {
+        return;
+    };
+    let view = RpcView::parse(t.as_bytes());
+    if let FaultDecision::Delay(d) = state.fault.decide(&FaultContext {
+        transport: Transport::Ws,
+        view: &view,
+    }) {
+        info!(target: "chain_chaos::fault", rpc = %view.summary(), delay_ms = d.as_millis(), "injecting websocket latency");
+        tokio::time::sleep(d).await;
+    }
 }
 
 fn axum_to_tung(msg: AxumMsg) -> Option<TungMsg> {

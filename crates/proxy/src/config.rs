@@ -8,12 +8,15 @@ use std::net::SocketAddr;
 
 use serde::Deserialize;
 
+use crate::fault::config::FaultConfig;
+
 #[derive(Debug, Clone)]
 pub struct ProxyConfig {
     pub upstream_http: String,
     pub upstream_ws: String,
     pub listen: SocketAddr,
     pub log_bodies: bool,
+    pub faults: FaultConfig,
 }
 
 impl ProxyConfig {
@@ -32,7 +35,13 @@ impl ProxyConfig {
             upstream_ws,
             listen,
             log_bodies,
+            faults: FaultConfig::default(),
         })
+    }
+
+    pub fn with_faults(mut self, faults: FaultConfig) -> Self {
+        self.faults = faults;
+        self
     }
 }
 
@@ -43,6 +52,7 @@ pub struct FileConfig {
     pub upstream_ws: Option<String>,
     pub listen: Option<SocketAddr>,
     pub log_bodies: Option<bool>,
+    pub faults: Option<FaultConfig>,
 }
 
 impl FileConfig {
@@ -78,6 +88,8 @@ pub enum ConfigError {
     Toml(String),
     #[error("missing required config value: {0}")]
     Missing(&'static str),
+    #[error("invalid fault config: {0}")]
+    Fault(String),
 }
 
 #[cfg(test)]
@@ -86,13 +98,22 @@ mod tests {
 
     #[test]
     fn derives_ws_from_http() {
-        assert_eq!(derive_ws_url("http://127.0.0.1:8545").unwrap(), "ws://127.0.0.1:8545/");
-        assert_eq!(derive_ws_url("https://example.com/rpc").unwrap(), "wss://example.com/rpc");
+        assert_eq!(
+            derive_ws_url("http://127.0.0.1:8545").unwrap(),
+            "ws://127.0.0.1:8545/"
+        );
+        assert_eq!(
+            derive_ws_url("https://example.com/rpc").unwrap(),
+            "wss://example.com/rpc"
+        );
     }
 
     #[test]
     fn passes_through_ws_scheme() {
-        assert_eq!(derive_ws_url("ws://127.0.0.1:8545").unwrap(), "ws://127.0.0.1:8545/");
+        assert_eq!(
+            derive_ws_url("ws://127.0.0.1:8545").unwrap(),
+            "ws://127.0.0.1:8545/"
+        );
     }
 
     #[test]

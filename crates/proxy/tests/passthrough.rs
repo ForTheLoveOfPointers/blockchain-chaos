@@ -24,7 +24,10 @@ fn anvil_available() -> bool {
 
 async fn wait_ready(client: &reqwest::Client, url: &str) {
     for _ in 0..100 {
-        if rpc_raw(client, url, "eth_chainId", json!(1)).await.is_some() {
+        if rpc_raw(client, url, "eth_chainId", json!(1))
+            .await
+            .is_some()
+        {
             return;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -39,7 +42,9 @@ async fn rpc_raw(client: &reqwest::Client, url: &str, method: &str, id: Value) -
 }
 
 async fn result(client: &reqwest::Client, url: &str, method: &str) -> String {
-    let v = rpc_raw(client, url, method, json!(1)).await.expect("response");
+    let v = rpc_raw(client, url, method, json!(1))
+        .await
+        .expect("response");
     v.get("result")
         .and_then(Value::as_str)
         .unwrap_or_else(|| panic!("no result in {v}"))
@@ -64,7 +69,6 @@ async fn proxy_is_transparent_over_anvil() {
     let upstream = format!("http://127.0.0.1:{ANVIL_PORT}");
     wait_ready(&client, &upstream).await;
 
-    // Bring up the proxy on an ephemeral port pointing at anvil.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let cfg = chain_chaos_proxy::ProxyConfig::new(upstream.clone(), None, addr, false).unwrap();
@@ -75,7 +79,6 @@ async fn proxy_is_transparent_over_anvil() {
     });
     let proxy_url = format!("http://{addr}");
 
-    // 1. Single calls match the upstream exactly.
     assert_eq!(
         result(&client, &upstream, "eth_chainId").await,
         result(&client, &proxy_url, "eth_chainId").await,
@@ -87,7 +90,6 @@ async fn proxy_is_transparent_over_anvil() {
         "blockNumber must match upstream"
     );
 
-    // 2. Batch round-trips with ids matched to the right sub-responses.
     let batch = json!([
         {"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":"a"},
         {"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":7}
@@ -107,7 +109,6 @@ async fn proxy_is_transparent_over_anvil() {
     assert!(by_id(&json!("a")).is_some(), "string id 'a' preserved");
     assert!(by_id(&json!(7)).is_some(), "numeric id 7 preserved");
 
-    // 3. A string id survives verbatim on a single call.
     let single = rpc_raw(&client, &proxy_url, "eth_chainId", json!("str-id"))
         .await
         .unwrap();

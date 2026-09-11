@@ -1,0 +1,40 @@
+# Example chain-chaos proxy config with Phase 2 transport faults.
+#
+#   chain-chaos proxy --config examples/faults.toml
+#
+# The application points its RPC URL at the proxy's `listen` address; every
+# random decision is derived from `seed`, so a run reproduces exactly.
+
+upstream = "http://127.0.0.1:8545"   # your real RPC endpoint (ws is derived)
+listen   = "127.0.0.1:8546"
+
+[faults]
+seed = 481923            # omit to auto-generate one (it gets logged for replay)
+
+# Every eth_getLogs takes an extra 2s.
+[[faults.rules]]
+name    = "slow getLogs"
+methods = ["eth_getLogs"]
+delay   = "2s"
+
+# Half of eth_call requests get 100ms–1.5s of jitter.
+[[faults.rules]]
+methods     = ["eth_call"]
+probability = 0.5
+delay       = { min = "100ms", max = "1500ms" }
+
+# 20% of transaction submissions are rate-limited (HTTP 429).
+[[faults.rules]]
+methods     = ["eth_sendRawTransaction"]
+probability = 0.2
+reject      = { http_status = 429, code = -32005, message = "rate limited" }
+
+# 2% of any request is held 10s then failed, emulating an upstream timeout.
+[[faults.rules]]
+probability = 0.02
+timeout     = "10s"
+
+# WebSocket connections are torn down 30s in, to test reconnect handling.
+[[faults.rules]]
+transport           = "ws"
+ws_disconnect_after = "30s"
