@@ -62,9 +62,13 @@ seed: 12345
   matched by method and transport, rolled against a deterministic seed.
 - **Scenario engine** (Phase 3): a YAML scenario turns individual faults into a
   time-ordered, reproducible experiment, with `recover` to return to healthy.
+- **Chain-aware faults** (Phase 4): rewrite the upstream response — `stale_head`
+  (report a head N blocks behind reality), `missing_logs` (empty `eth_getLogs`),
+  and `malformed` (corrupt a method's result). A brief `stale_head` window
+  reproduces the head-regression a reorg looks like to a poller.
 
-Chain-aware faults (stale heads, reorgs, missing logs), multi-provider chaos, and
-built-in assertions are on the roadmap — see [`DESIGN.md`](DESIGN.md) and
+Hash-level reorgs, multi-provider chaos, and built-in assertions are still on the
+roadmap — see [`DESIGN.md`](DESIGN.md) and
 [`blockchain-chaos-roadmap.txt`](blockchain-chaos-roadmap.txt).
 
 ## Two ways to inject faults

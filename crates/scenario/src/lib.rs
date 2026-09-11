@@ -157,4 +157,34 @@ events:
         assert_eq!(resolve_seed(Some(42), &s), 42);
         assert_eq!(resolve_seed(None, &s), 100);
     }
+
+    #[test]
+    fn compiles_chain_fault_events() {
+        let t = compile(
+            "name: s
+events:
+  - at: startup
+    stale_head: { blocks: 2 }
+  - after: 5s
+    missing_logs: {}
+  - after: 10s
+    recover: true
+",
+        );
+        assert_eq!(t.steps.len(), 3);
+        assert_eq!(t.steps[0].active.len(), 1);
+        assert_eq!(t.steps[1].active.len(), 2);
+        assert_eq!(t.steps[2].active.len(), 0);
+    }
+
+    #[test]
+    fn rejects_malformed_without_methods() {
+        let err = Scenario::from_yaml_str(
+            "name: s\nevents:\n  - at: startup\n    malformed: { methods: [] }\n",
+        )
+        .unwrap()
+        .compile(1)
+        .unwrap_err();
+        assert!(err.to_string().contains("malformed requires"), "{err}");
+    }
 }

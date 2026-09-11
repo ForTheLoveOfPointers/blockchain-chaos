@@ -44,6 +44,18 @@ pub enum Action {
     Reject(RejectSpec),
     Drop,
     WsDisconnect(Duration),
+    StaleHead { lag: u64 },
+    MissingLogs,
+    Malformed,
+}
+
+impl Action {
+    pub fn is_response(&self) -> bool {
+        matches!(
+            self,
+            Action::StaleHead { .. } | Action::MissingLogs | Action::Malformed
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

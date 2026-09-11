@@ -40,6 +40,11 @@ pub struct RuleConfig {
     #[serde(default)]
     pub drop: bool,
     pub ws_disconnect_after: Option<String>,
+    pub stale_head: Option<u64>,
+    #[serde(default)]
+    pub missing_logs: bool,
+    #[serde(default)]
+    pub malformed: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -98,8 +103,9 @@ impl RuleConfig {
         }
 
         let action = self.collapse_action(&label)?;
+        let methods = self.methods.or_else(|| default_methods(&action));
         let matcher = Matcher {
-            methods: self.methods,
+            methods,
             transport: self.transport.into(),
         };
 
@@ -133,11 +139,20 @@ impl RuleConfig {
                 after,
             )?));
         }
+        if let Some(lag) = self.stale_head {
+            actions.push(Action::StaleHead { lag });
+        }
+        if self.missing_logs {
+            actions.push(Action::MissingLogs);
+        }
+        if self.malformed {
+            actions.push(Action::Malformed);
+        }
 
         match actions.len() {
             0 => Err(fault_err(
                 label,
-                "no action set (expected one of: delay, timeout, reject, drop, ws_disconnect_after)"
+                "no action set (expected one of: delay, timeout, reject, drop, ws_disconnect_after, stale_head, missing_logs, malformed)"
                     .to_string(),
             )),
             1 => Ok(actions.pop().expect("len checked")),
@@ -198,6 +213,14 @@ fn parse_duration(label: &str, field: &str, s: &str) -> Result<Duration, ConfigE
             format!("invalid duration for `{field}` (`{s}`): {e}"),
         )
     })
+}
+
+fn default_methods(action: &Action) -> Option<Vec<String>> {
+    match action {
+        Action::StaleHead { .. } => Some(vec!["eth_blockNumber".to_string()]),
+        Action::MissingLogs => Some(vec!["eth_getLogs".to_string()]),
+        _ => None,
+    }
 }
 
 fn fault_err(label: &str, msg: String) -> ConfigError {
@@ -273,5 +296,20 @@ mod tests {
     fn rejects_inverted_delay_range() {
         let err = compile_toml("[[rules]]\ndelay = { min = \"2s\", max = \"1s\" }\n").unwrap_err();
         assert!(err.to_string().contains("greater than"), "{err}");
+    }
+
+    #[test]
+    fn compiles_chain_faults() {
+        let engine = compile_toml(
+            "[[rules]]\nstale_head = 3\n\n[[rules]]\nmissing_logs = true\n\n[[rules]]\nmethods = [\"eth_call\"]\nmalformed = true\n",
+        )
+        .expect("should compile");
+        assert_eq!(engine.rule_count(), 3);
+    }
+
+    #[test]
+    fn rejects_rule_with_transport_and_chain_action() {
+        let err = compile_toml("[[rules]]\nstale_head = 1\ndrop = true\n").unwrap_err();
+        assert!(err.to_string().contains("expected exactly one"), "{err}");
     }
 }

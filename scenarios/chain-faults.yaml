@@ -1,0 +1,11 @@
+name: chain-faults
+seed: 777
+events:
+  - at: startup
+    stale_head: { blocks: 3 }
+  - after: 8s
+    missing_logs: {}
+  - after: 16s
+    malformed: { methods: [eth_call] }
+  - after: 24s
+    recover: true

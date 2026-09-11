@@ -38,3 +38,19 @@ timeout     = "10s"
 [[faults.rules]]
 transport           = "ws"
 ws_disconnect_after = "30s"
+
+# Chain-aware faults rewrite the upstream response (Phase 4).
+
+# Report a head 3 blocks behind reality (defaults to matching eth_blockNumber).
+[[faults.rules]]
+stale_head = 3
+
+# Return no logs for eth_getLogs, half the time.
+[[faults.rules]]
+probability  = 0.5
+missing_logs = true
+
+# Corrupt the result of eth_call so the client hits a parse error.
+[[faults.rules]]
+methods   = ["eth_call"]
+malformed = true

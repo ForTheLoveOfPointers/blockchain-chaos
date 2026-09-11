@@ -10,12 +10,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chain_chaos_proxy::fault::{Action, DelaySpec, FaultEngine, Matcher, RejectSpec, Rule};
+use chain_chaos_proxy::fault::{
+    Action, DelaySpec, FaultEngine, Matcher, RejectSpec, Rule, TransportMatch,
+};
 use tokio::time::Instant;
 use tracing::info;
 
 use crate::config::{
-    DelayAction, DisconnectAction, DropAction, EventConfig, RejectAction, Scenario, TimeoutAction,
+    DelayAction, DisconnectAction, DropAction, EventConfig, MalformedAction, MissingLogsAction,
+    RejectAction, Scenario, StaleHeadAction, TimeoutAction,
 };
 use crate::ScenarioError;
 
@@ -154,6 +157,9 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
         ev.reject.is_some(),
         ev.drop.is_some(),
         ev.disconnect.is_some(),
+        ev.stale_head.is_some(),
+        ev.missing_logs.is_some(),
+        ev.malformed.is_some(),
         ev.recover == Some(true),
     ]
     .iter()
@@ -163,7 +169,7 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
         return Err(event_err(
             index,
             format!(
-                "expected exactly one action (delay, timeout, reject, drop, disconnect, recover), found {set}"
+                "expected exactly one action (delay, timeout, reject, drop, disconnect, stale_head, missing_logs, malformed, recover), found {set}"
             ),
         ));
     }
@@ -185,6 +191,15 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
     }
     if let Some(a) = ev.disconnect {
         return compile_disconnect(a, index);
+    }
+    if let Some(a) = ev.stale_head {
+        return compile_stale_head(a, index);
+    }
+    if let Some(a) = ev.missing_logs {
+        return compile_missing_logs(a, index);
+    }
+    if let Some(a) = ev.malformed {
+        return compile_malformed(a, index);
     }
     unreachable!("action count checked above")
 }
@@ -274,6 +289,73 @@ fn compile_disconnect(
         matcher,
         probability: probability(a.probability, index)?,
         action: Action::WsDisconnect(d),
+    };
+    Ok((Transition::Add(rule), summary))
+}
+
+fn compile_stale_head(
+    a: StaleHeadAction,
+    index: usize,
+) -> Result<(Transition, String), ScenarioError> {
+    let summary = format!("stale head lag={}", a.blocks);
+    chain_rule(
+        index,
+        Some(vec!["eth_blockNumber".to_string()]),
+        a.probability,
+        Action::StaleHead { lag: a.blocks },
+        summary,
+    )
+}
+
+fn compile_missing_logs(
+    a: MissingLogsAction,
+    index: usize,
+) -> Result<(Transition, String), ScenarioError> {
+    chain_rule(
+        index,
+        Some(vec!["eth_getLogs".to_string()]),
+        a.probability,
+        Action::MissingLogs,
+        "missing logs".to_string(),
+    )
+}
+
+fn compile_malformed(
+    a: MalformedAction,
+    index: usize,
+) -> Result<(Transition, String), ScenarioError> {
+    if a.methods.is_empty() {
+        return Err(event_err(
+            index,
+            "malformed requires a non-empty `methods` list",
+        ));
+    }
+    let summary = format!("malformed {:?}", a.methods);
+    chain_rule(
+        index,
+        Some(a.methods),
+        a.probability,
+        Action::Malformed,
+        summary,
+    )
+}
+
+fn chain_rule(
+    index: usize,
+    methods: Option<Vec<String>>,
+    prob: Option<f64>,
+    action: Action,
+    summary: String,
+) -> Result<(Transition, String), ScenarioError> {
+    let matcher = Matcher {
+        methods,
+        transport: TransportMatch::Http,
+    };
+    let rule = Rule {
+        name: Some(format!("event[{index}]")),
+        matcher,
+        probability: probability(prob, index)?,
+        action,
     };
     Ok((Transition::Add(rule), summary))
 }

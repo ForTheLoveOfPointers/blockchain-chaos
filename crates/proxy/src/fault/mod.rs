@@ -10,26 +10,31 @@
 //! - [`rule`] — the runtime matcher/action types and the matching logic.
 //! - [`rng`] — the seeded, deterministic RNG.
 //!
-//! The public surface is a [`FaultEngine`] plus [`FaultEngine::decide`], which
-//! turns a [`FaultContext`] into a [`FaultDecision`] the choke points `match`
-//! on.
+//! The engine runs in two phases. [`FaultEngine::decide`] runs *before*
+//! forwarding and turns a [`FaultContext`] into a [`FaultDecision`] for
+//! request-side transport faults (delay, timeout, reject, drop, ws-disconnect).
+//! [`FaultEngine::intercept`] runs *after* forwarding and rewrites the upstream
+//! response for chain-aware faults (stale head, missing logs, malformed). Each
+//! rule belongs to exactly one phase, distinguished by [`Action::is_response`],
+//! so a rule's probability is rolled once in the phase that owns it.
 //!
-//! IMPORTANT: transport faults operate on the request *shape* only ([`RpcView`]:
-//! method + id) and never decode blockchain semantics. Chain-aware faults
-//! (stale heads, reorgs, missing logs) are a separate, stateful engine that
-//! will sit behind this same seam in a later phase — keeping this layer
-//! byte-oriented is what keeps that door open.
+//! Chain-aware faults read and rewrite the JSON-RPC result but hold no
+//! cross-request state: a brief window of `StaleHead` under the scenario engine
+//! is what models a reorg (the head jumps back, then forward on recover).
+//! Hash-level fork modelling would need per-connection state and is left open.
 //!
 //! Determinism caveat: the RNG is a single shared stream, so under concurrent
 //! requests the *order* of draws is not deterministic and exact replays can
 //! diverge. This is fine for single-client tests; a keyed per-request RNG is
-//! the real fix and lands with the scenario engine.
+//! the real fix.
 
 pub mod config;
 pub mod rng;
 pub mod rule;
 
 use std::time::Duration;
+
+use serde_json::Value;
 
 use crate::rpc::RpcView;
 
@@ -94,6 +99,9 @@ impl FaultEngine {
     pub fn decide(&self, ctx: &FaultContext) -> FaultDecision {
         let rules = self.rules.read().unwrap();
         for rule in rules.iter() {
+            if rule.action.is_response() {
+                continue;
+            }
             if !rule.matcher.matches(ctx.transport, ctx.view) {
                 continue;
             }
@@ -105,6 +113,23 @@ impl FaultEngine {
         FaultDecision::Pass
     }
 
+    pub fn intercept(&self, ctx: &FaultContext, response: &[u8]) -> Option<Vec<u8>> {
+        let rules = self.rules.read().unwrap();
+        for rule in rules.iter() {
+            if !rule.action.is_response() {
+                continue;
+            }
+            if !rule.matcher.matches(ctx.transport, ctx.view) {
+                continue;
+            }
+            if !self.rng.chance(rule.probability) {
+                continue;
+            }
+            return apply_response(&rule.action, response);
+        }
+        None
+    }
+
     fn resolve(&self, action: &Action) -> FaultDecision {
         match action {
             Action::Delay(spec) => FaultDecision::Delay(self.sample_delay(spec)),
@@ -112,6 +137,9 @@ impl FaultEngine {
             Action::Reject(spec) => FaultDecision::Reject(spec.clone()),
             Action::Drop => FaultDecision::Drop,
             Action::WsDisconnect(d) => FaultDecision::WsDisconnect(*d),
+            Action::StaleHead { .. } | Action::MissingLogs | Action::Malformed => {
+                FaultDecision::Pass
+            }
         }
     }
 
@@ -125,6 +153,35 @@ impl FaultEngine {
             }
         }
     }
+}
+
+fn apply_response(action: &Action, response: &[u8]) -> Option<Vec<u8>> {
+    let mut body: Value = serde_json::from_slice(response).ok()?;
+    let obj = body.as_object_mut()?;
+    if !obj.contains_key("result") {
+        return None;
+    }
+    match action {
+        Action::StaleHead { lag } => {
+            let hex = obj.get("result").and_then(Value::as_str)?.to_owned();
+            let head = parse_hex_u64(&hex)?;
+            let stale = head.saturating_sub(*lag);
+            obj.insert("result".to_string(), Value::String(format!("0x{stale:x}")));
+        }
+        Action::MissingLogs => {
+            obj.insert("result".to_string(), Value::Array(Vec::new()));
+        }
+        Action::Malformed => {
+            obj.insert("result".to_string(), Value::String("0xZZ".to_string()));
+        }
+        _ => return None,
+    }
+    serde_json::to_vec(&body).ok()
+}
+
+fn parse_hex_u64(s: &str) -> Option<u64> {
+    let trimmed = s.strip_prefix("0x").unwrap_or(s);
+    u64::from_str_radix(trimmed, 16).ok()
 }
 
 #[cfg(test)]
@@ -208,5 +265,92 @@ mod tests {
                 matches!(db, FaultDecision::Drop),
             );
         }
+    }
+
+    fn response_rule(methods: &[&str], action: Action) -> Rule {
+        Rule {
+            name: None,
+            matcher: Matcher {
+                methods: Some(methods.iter().map(|m| m.to_string()).collect()),
+                transport: TransportMatch::Http,
+            },
+            probability: 1.0,
+            action,
+        }
+    }
+
+    fn intercept(engine: &FaultEngine, method: &str, response: &[u8]) -> Option<serde_json::Value> {
+        engine
+            .intercept(
+                &FaultContext {
+                    transport: Transport::Http,
+                    view: &view(method),
+                },
+                response,
+            )
+            .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[test]
+    fn intercept_stale_head_rewrites_block_number() {
+        let e = FaultEngine::new(
+            1,
+            vec![response_rule(
+                &["eth_blockNumber"],
+                Action::StaleHead { lag: 3 },
+            )],
+        );
+        let resp = br#"{"jsonrpc":"2.0","id":1,"result":"0x10"}"#;
+        let v = intercept(&e, "eth_blockNumber", resp).expect("rewritten");
+        assert_eq!(v["result"], "0xd");
+        assert_eq!(v["id"], 1);
+    }
+
+    #[test]
+    fn intercept_missing_logs_empties_result() {
+        let e = FaultEngine::new(
+            1,
+            vec![response_rule(&["eth_getLogs"], Action::MissingLogs)],
+        );
+        let resp = br#"{"jsonrpc":"2.0","id":2,"result":[{"blockNumber":"0x1"}]}"#;
+        let v = intercept(&e, "eth_getLogs", resp).expect("rewritten");
+        assert_eq!(v["result"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn intercept_malformed_corrupts_result() {
+        let e = FaultEngine::new(1, vec![response_rule(&["eth_call"], Action::Malformed)]);
+        let resp = br#"{"jsonrpc":"2.0","id":3,"result":"0x1"}"#;
+        let v = intercept(&e, "eth_call", resp).expect("rewritten");
+        assert_eq!(v["result"], "0xZZ");
+    }
+
+    #[test]
+    fn intercept_passes_through_unmatched_method() {
+        let e = FaultEngine::new(
+            1,
+            vec![response_rule(
+                &["eth_blockNumber"],
+                Action::StaleHead { lag: 1 },
+            )],
+        );
+        let resp = br#"{"jsonrpc":"2.0","id":4,"result":"0x5"}"#;
+        assert!(intercept(&e, "eth_chainId", resp).is_none());
+    }
+
+    #[test]
+    fn decide_ignores_response_actions() {
+        let e = FaultEngine::new(
+            1,
+            vec![response_rule(
+                &["eth_blockNumber"],
+                Action::StaleHead { lag: 1 },
+            )],
+        );
+        let d = e.decide(&FaultContext {
+            transport: Transport::Http,
+            view: &view("eth_blockNumber"),
+        });
+        assert!(matches!(d, FaultDecision::Pass));
     }
 }

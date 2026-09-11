@@ -31,6 +31,9 @@ pub struct EventConfig {
     pub reject: Option<RejectAction>,
     pub drop: Option<DropAction>,
     pub disconnect: Option<DisconnectAction>,
+    pub stale_head: Option<StaleHeadAction>,
+    pub missing_logs: Option<MissingLogsAction>,
+    pub malformed: Option<MalformedAction>,
     pub recover: Option<bool>,
 }
 
@@ -91,6 +94,26 @@ pub struct DropAction {
 pub struct DisconnectAction {
     pub probability: Option<f64>,
     pub after: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StaleHeadAction {
+    pub probability: Option<f64>,
+    pub blocks: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MissingLogsAction {
+    pub probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MalformedAction {
+    pub methods: Vec<String>,
+    pub probability: Option<f64>,
 }
 
 impl Scenario {

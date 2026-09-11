@@ -1,8 +1,8 @@
 # chain-chaos — Design
 
 > Status: living document. Covers what exists today (the RPC chaos proxy, transport
-> faults, and the deterministic scenario engine) and the seams left open for the
-> chain-aware phases.
+> faults, response-rewriting chain faults, and the deterministic scenario engine)
+> and the seams left open for the remaining chain-aware phases.
 
 ## Problem statement
 
@@ -37,13 +37,16 @@ In scope today:
   same faults (Phase 2).
 - A YAML scenario engine that turns individual faults into a time-ordered,
   reproducible experiment, with `recover` to return to healthy (Phase 3).
+- EVM-aware faults that rewrite the upstream response: stale head, missing logs,
+  malformed result (Phase 4).
 
 Explicitly *out* of the current scope, deferred to later phases as the roadmap
 instructs:
 
-- EVM-aware faults (stale head, delayed/missing/duplicated logs) — Phase 4.
 - Multi-provider disagreement and failover — Phase 5.
-- Reorg testing — Phase 6.
+- Hash-level reorg modelling (divergent block hashes, convergence) — Phase 6. A
+  brief window of `stale_head` already reproduces the head-regression a reorg
+  *looks like* to a poller; modelling the fork itself needs per-connection state.
 - Built-in assertions / test reports / `chain-chaos test` — Phases 7–8.
 
 The design goal is that none of the above require re-architecting what exists:
@@ -85,13 +88,20 @@ be replayed. Caveat: the RNG is one shared stream, so under concurrent requests
 the *order* of draws is not deterministic; exact replay assumes a single client
 driving requests in sequence. A keyed per-request RNG is the eventual fix.
 
-### The fault seam (why chain-aware faults fit later)
+### The fault seam (two phases)
 
-Transport faults operate on request *shape* only (`RpcView`): they never decode
-blockchain semantics. Chain-aware faults (stale heads, reorgs, missing logs) are
-a separate, stateful engine that will sit behind the *same* `decide()` seam,
-consuming parsed responses rather than just request shape. Keeping this layer
-byte-oriented is what keeps that door open.
+The engine runs in two phases against the same rule set. `decide()` runs *before*
+forwarding and returns a `FaultDecision` for request-side transport faults.
+`intercept()` runs *after* forwarding and returns rewritten response bytes for
+chain-aware faults. A rule belongs to exactly one phase (`Action::is_response`),
+so its probability is rolled once, in the phase that owns it, and the transport
+pass-path stays byte-oriented and untouched.
+
+Chain faults parse and rewrite the JSON-RPC `result` but hold no cross-request
+state, which is what keeps them deterministic and cheap. Hash-level reorg
+modelling is the one chain fault that needs state (a canonical-chain model with
+fork choice); it is deferred, and the seam for it is a per-connection state bag
+alongside the shared rule set.
 
 ## Fault model
 
@@ -102,9 +112,14 @@ byte-oriented is what keeps that door open.
 | `reject`           | http      | Return a synthetic JSON-RPC error (e.g. 429 rate-limit).    |
 | `drop`             | http      | Close with no response body.                                |
 | `ws_disconnect`    | ws        | Tear the WebSocket down after a delay (tests reconnect).    |
+| `stale_head`       | http      | Rewrite `eth_blockNumber` to report N blocks behind reality.|
+| `missing_logs`     | http      | Rewrite `eth_getLogs` to return an empty result.            |
+| `malformed`        | http      | Rewrite the result of the named methods into garbage.       |
 
 Each rule carries a matcher (methods + transport), a `probability` (rolled per
-matching request), and exactly one action. First matching rule wins.
+matching request), and exactly one action. First matching rule wins. The first
+five faults act on the request (`decide`, pre-forward); the last three rewrite
+the upstream response (`intercept`, post-forward).
 
 ## Example scenario
 
@@ -138,5 +153,6 @@ fault.
   available to an application; it does not implement consensus or execution.
 - **Not a general HTTP proxy.** It understands just enough JSON-RPC to log method
   and id and to synthesize well-formed error responses.
-- **No premature abstraction.** One seam, one decision point. A second consumer
-  (the chain-aware engine) will motivate abstraction — not speculation.
+- **No premature abstraction.** One rule set, two phases (`decide` pre-forward,
+  `intercept` post-forward) on the same engine. A third consumer — stateful reorg
+  modelling — is what would motivate splitting the engine, not speculation.

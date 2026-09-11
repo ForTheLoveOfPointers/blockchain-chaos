@@ -88,6 +88,24 @@ async fn forward_upstream(state: &AppState, view: &RpcView, body: Bytes) -> Resp
                 }
             };
 
+            let bytes = if status.is_success() {
+                match state.fault.intercept(
+                    &FaultContext {
+                        transport: Transport::Http,
+                        view,
+                    },
+                    &bytes,
+                ) {
+                    Some(rewritten) => {
+                        info!(target: "chain_chaos::fault", rpc = %view.summary(), "rewriting upstream response");
+                        Bytes::from(rewritten)
+                    }
+                    None => bytes,
+                }
+            } else {
+                bytes
+            };
+
             if state.cfg.log_bodies {
                 info!(target: "chain_chaos::http", %status, elapsed_ms, body = %String::from_utf8_lossy(&bytes), "<- upstream");
             } else {
