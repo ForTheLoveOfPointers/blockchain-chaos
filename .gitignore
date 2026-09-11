@@ -6,3 +6,4 @@ Cargo.lock.orig
 personal
 *.txt
 /failure/
+.claude
