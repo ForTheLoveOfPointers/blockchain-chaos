@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use chain_chaos_proxy::{AppState, FileConfig, ProxyConfig};
+use chain_chaos_proxy::{AppState, ClusterConfig, FileConfig, ProxyConfig};
 use chain_chaos_scenario::{resolve_seed, Scenario};
 use clap::{Parser, Subcommand};
 use tracing::info;
@@ -39,6 +39,8 @@ enum Command {
     Proxy(ProxyArgs),
     /// Run the proxy driven by a deterministic YAML scenario.
     Run(RunArgs),
+    /// Run one proxy per provider from a multi-provider TOML config.
+    Cluster(ClusterArgs),
     /// Compile a scenario and print its timeline without running it.
     Inspect(InspectArgs),
 }
@@ -93,6 +95,17 @@ struct RunArgs {
 }
 
 #[derive(clap::Args)]
+struct ClusterArgs {
+    /// Path to the multi-provider TOML config.
+    #[arg(long)]
+    config: PathBuf,
+
+    /// Override the cluster seed applied to providers without their own.
+    #[arg(long)]
+    seed: Option<u64>,
+}
+
+#[derive(clap::Args)]
 struct InspectArgs {
     /// Path to the YAML scenario file.
     scenario: PathBuf,
@@ -117,6 +130,9 @@ fn main() -> Result<()> {
         }
         Command::Run(args) => {
             runtime.block_on(run_scenario(args))?;
+        }
+        Command::Cluster(args) => {
+            runtime.block_on(run_cluster(args))?;
         }
         Command::Inspect(args) => {
             let scenario = load_scenario(&args.scenario)?;
@@ -152,6 +168,16 @@ async fn run_scenario(args: RunArgs) -> Result<()> {
     tokio::spawn(chain_chaos_scenario::drive(engine, timeline));
 
     chain_chaos_proxy::serve(state).await
+}
+
+async fn run_cluster(args: ClusterArgs) -> Result<()> {
+    let text = std::fs::read_to_string(&args.config)
+        .with_context(|| format!("reading cluster config {}", args.config.display()))?;
+    let mut cfg = ClusterConfig::from_toml_str(&text).context("parsing cluster config")?;
+    if let Some(seed) = args.seed {
+        cfg.seed = Some(seed);
+    }
+    chain_chaos_proxy::run_cluster(cfg).await
 }
 
 fn load_scenario(path: &PathBuf) -> Result<Scenario> {

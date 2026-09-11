@@ -6,6 +6,7 @@
 //! the [`fault`] engine is consulted at the single forwarding choke point in
 //! [`http`]/[`ws`], and only faulted requests deviate from pass-through.
 
+pub mod cluster;
 pub mod config;
 pub mod fault;
 pub mod http;
@@ -17,6 +18,7 @@ use axum::{routing::post, Router};
 use tokio::net::TcpListener;
 use tracing::info;
 
+pub use cluster::{run_cluster, ClusterConfig, ProviderConfig};
 pub use config::{ConfigError, FileConfig, ProxyConfig};
 pub use state::AppState;
 

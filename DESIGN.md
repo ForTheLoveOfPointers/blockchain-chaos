@@ -39,11 +39,13 @@ In scope today:
   reproducible experiment, with `recover` to return to healthy (Phase 3).
 - EVM-aware faults that rewrite the upstream response: stale head, missing logs,
   malformed result (Phase 4).
+- Multi-provider chaos: one independent proxy per RPC provider, each with its own
+  upstream and fault set, for testing failover and provider disagreement
+  (Phase 5).
 
 Explicitly *out* of the current scope, deferred to later phases as the roadmap
 instructs:
 
-- Multi-provider disagreement and failover — Phase 5.
 - Hash-level reorg modelling (divergent block hashes, convergence) — Phase 6. A
   brief window of `stale_head` already reproduces the head-regression a reorg
   *looks like* to a poller; modelling the fork itself needs per-connection state.
@@ -74,7 +76,19 @@ Crates:
 - `crates/scenario` — the deterministic scenario engine. Parses a YAML scenario
   into time-ordered events and drives the proxy's *active rule set* over wall-clock
   time from a background scheduler. Independent of EVM semantics by design.
-- `crates/cli` — the `chain-chaos` binary (`proxy`, `run`, `inspect`).
+- `crates/cli` — the `chain-chaos` binary (`proxy`, `run`, `cluster`, `inspect`).
+
+### Multi-provider (Phase 5)
+
+An application that talks to several RPC providers is modelled by running one
+proxy per provider, each with its own upstream, listen address, and fault set
+(`crates/proxy/src/cluster.rs`). A provider *is* the same single-upstream proxy
+described above; the cluster only spawns several and joins them. This keeps the
+fault engine, scenario engine, and transport paths untouched — provider
+disagreement is an emergent property of independently faulted proxies, not a new
+mechanism. The application points each of its provider URLs at the matching
+listen address and its failover logic meets, for example, a provider whose head
+lags three blocks behind the others.
 
 Key invariant: **transparency survives the pass path.** When no fault fires, the
 original request/response bytes are forwarded untouched, which is what preserves

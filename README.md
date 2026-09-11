@@ -64,19 +64,28 @@ seed: 12345
   time-ordered, reproducible experiment, with `recover` to return to healthy.
 - **Chain-aware faults** (Phase 4): rewrite the upstream response — `stale_head`
   (report a head N blocks behind reality), `missing_logs` (empty `eth_getLogs`),
-  and `malformed` (corrupt a method's result). A brief `stale_head` window
-  reproduces the head-regression a reorg looks like to a poller.
+  and `malformed` (corrupt a method's result).
+- **Multi-provider chaos** (Phase 5): run one independent proxy per RPC provider,
+  each with its own upstream and fault set, so provider A can lag while B has an
+  outage and C stays healthy — exercising an application's failover and
+  provider-disagreement logic (see [`examples/providers.toml`](examples/providers.toml)).
 
-Hash-level reorgs, multi-provider chaos, and built-in assertions are still on the
-roadmap — see [`DESIGN.md`](DESIGN.md) and
+Built-in assertions and CI integration are still on the roadmap — see
+[`DESIGN.md`](DESIGN.md) and
 [`blockchain-chaos-roadmap.txt`](blockchain-chaos-roadmap.txt).
 
-## Two ways to inject faults
+## Ways to inject faults
 
 **Static rules** — a TOML config of always-on rules (see [`examples/faults.toml`](examples/faults.toml)):
 
 ```sh
 cargo run -p chain-chaos -- proxy --config examples/faults.toml
+```
+
+**Provider cluster** — one proxy per RPC provider, each independently faulted (see [`examples/providers.toml`](examples/providers.toml)):
+
+```sh
+cargo run -p chain-chaos -- cluster --config examples/providers.toml
 ```
 
 **Scenarios** — faults that change over time (see [`scenarios/`](scenarios)):
@@ -104,6 +113,7 @@ crates/
   cli/       # `chain-chaos` binary: proxy / run / inspect
 examples/
   faults.toml       # static fault config
+  providers.toml    # multi-provider cluster config
   block-watcher/    # example app + end-to-end chaos test
 scenarios/          # example scenarios
 DESIGN.md           # problem statement, architecture, fault model, non-goals

@@ -1,0 +1,32 @@
+# Example multi-provider chaos config (Phase 5).
+#
+#   chain-chaos cluster --config examples/providers.toml
+#
+# Each provider is an independent proxy: its own upstream, its own listen
+# address, and its own fault set. Point an application that uses multiple RPC
+# providers at these listen addresses and watch how its failover and
+# provider-disagreement logic copes when they diverge.
+
+seed = 424242   # cluster-wide default; a provider may set its own under [faults]
+
+# Healthy provider — plain pass-through, no faults.
+[providers.alchemy]
+upstream = "http://127.0.0.1:8545"
+listen   = "127.0.0.1:9001"
+
+# Lagging provider — reports a head 3 blocks behind the others.
+[providers.infura]
+upstream = "http://127.0.0.1:8545"
+listen   = "127.0.0.1:9002"
+[providers.infura.faults]
+[[providers.infura.faults.rules]]
+stale_head = 3
+
+# Flaky provider — 25% of requests time out after 5s, emulating an outage.
+[providers.quicknode]
+upstream = "http://127.0.0.1:8545"
+listen   = "127.0.0.1:9003"
+[providers.quicknode.faults]
+[[providers.quicknode.faults.rules]]
+probability = 0.25
+timeout     = "5s"
