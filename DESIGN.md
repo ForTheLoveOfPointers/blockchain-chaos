@@ -42,13 +42,13 @@ In scope today:
 - Multi-provider chaos: one independent proxy per RPC provider, each with its own
   upstream and fault set, for testing failover and provider disagreement
   (Phase 5).
+- Same-height reorg modelling: the top N blocks keep their numbers but take new
+  hashes, a re-linked parent chain, removed logs, and disappearing transactions,
+  over HTTP and `newHeads`, converging on `recover` (Phase 6).
 
 Explicitly *out* of the current scope, deferred to later phases as the roadmap
 instructs:
 
-- Hash-level reorg modelling (divergent block hashes, convergence) — Phase 6. A
-  brief window of `stale_head` already reproduces the head-regression a reorg
-  *looks like* to a poller; modelling the fork itself needs per-connection state.
 - Built-in assertions / test reports / `chain-chaos test` — Phases 7–8.
 
 The design goal is that none of the above require re-architecting what exists:
@@ -111,11 +111,29 @@ chain-aware faults. A rule belongs to exactly one phase (`Action::is_response`),
 so its probability is rolled once, in the phase that owns it, and the transport
 pass-path stays byte-oriented and untouched.
 
-Chain faults parse and rewrite the JSON-RPC `result` but hold no cross-request
-state, which is what keeps them deterministic and cheap. Hash-level reorg
-modelling is the one chain fault that needs state (a canonical-chain model with
-fork choice); it is deferred, and the seam for it is a per-connection state bag
-alongside the shared rule set.
+Most chain faults parse and rewrite the JSON-RPC `result` but hold no
+cross-request state, which is what keeps them deterministic and cheap. The reorg
+fault is the exception: it is the one fault that needs state, so it carries an
+`Arc`-shared model (fork point, depth, flags) inside its `Action`. Because the
+scenario driver clones the rule set at each transition, the `Arc` is shared and
+the fork point stays pinned for the life of the reorg; when `recover` drops the
+rule, the model is dropped with it and the real hashes flow again.
+
+### Reorg model (Phase 6)
+
+A reorg is synthesized by rewriting the upstream's *own* responses, so the
+alternative blocks are the real blocks with a rewritten identity — faithful to
+what a same-height reorg produces without simulating consensus. The fork point is
+pinned lazily from the first observed head (`eth_blockNumber` or a `newHeads`
+notification) as `head − depth`. Blocks `fork+1..=fork+depth` then take a
+deterministic alternative hash (a seeded 32-byte value, so replays match) and a
+re-linked `parentHash`; the block just above the branch has its `parentHash`
+re-pointed onto the alt tip, so a consumer walking parent links from the head
+sees one consistent history. `eth_getLogs` drops (or re-hashes) logs in the
+range, receipts and transactions in the range disappear, and `newHeads` frames
+are rewritten in the WS relay the same way. The reorg is connection-independent
+by design — every consumer sees the same canonical chain — which is what lets a
+Phase 5 cluster express *provider disagreement*: reorg one provider, not another.
 
 ## Fault model
 
@@ -129,11 +147,12 @@ alongside the shared rule set.
 | `stale_head`       | http      | Rewrite `eth_blockNumber` to report N blocks behind reality.|
 | `missing_logs`     | http      | Rewrite `eth_getLogs` to return an empty result.            |
 | `malformed`        | http      | Rewrite the result of the named methods into garbage.       |
+| `reorg`            | http, ws  | Replace the top N blocks with a re-linked alternative branch (hashes, parents, removed logs, disappearing txs, `newHeads`). |
 
 Each rule carries a matcher (methods + transport), a `probability` (rolled per
 matching request), and exactly one action. First matching rule wins. The first
-five faults act on the request (`decide`, pre-forward); the last three rewrite
-the upstream response (`intercept`, post-forward).
+five faults act on the request (`decide`, pre-forward); the rest rewrite the
+upstream response (`intercept`, post-forward — and, for `reorg`, the WS relay).
 
 ## Example scenario
 
@@ -164,9 +183,12 @@ fault.
 ## Non-goals
 
 - **Not a blockchain node or fork.** chain-chaos manipulates the *observations*
-  available to an application; it does not implement consensus or execution.
+  available to an application; it does not implement consensus or execution. The
+  reorg fault rewrites observed block identities — it does not re-execute the
+  alternative branch, so state (`eth_call`, balances) is not forked.
 - **Not a general HTTP proxy.** It understands just enough JSON-RPC to log method
   and id and to synthesize well-formed error responses.
 - **No premature abstraction.** One rule set, two phases (`decide` pre-forward,
-  `intercept` post-forward) on the same engine. A third consumer — stateful reorg
-  modelling — is what would motivate splitting the engine, not speculation.
+  `intercept` post-forward) on the same engine. The stateful reorg fault fits
+  within it by carrying its own `Arc`-shared model, rather than forcing a third
+  engine; splitting the engine stays unjustified until a fault needs it.

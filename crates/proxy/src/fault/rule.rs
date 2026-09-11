@@ -8,6 +8,7 @@
 
 use std::time::Duration;
 
+use crate::fault::reorg::ReorgHandle;
 use crate::rpc::RpcView;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,13 +48,14 @@ pub enum Action {
     StaleHead { lag: u64 },
     MissingLogs,
     Malformed,
+    Reorg(ReorgHandle),
 }
 
 impl Action {
     pub fn is_response(&self) -> bool {
         matches!(
             self,
-            Action::StaleHead { .. } | Action::MissingLogs | Action::Malformed
+            Action::StaleHead { .. } | Action::MissingLogs | Action::Malformed | Action::Reorg(_)
         )
     }
 }

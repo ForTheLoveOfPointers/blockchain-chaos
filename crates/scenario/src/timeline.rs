@@ -11,14 +11,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chain_chaos_proxy::fault::{
-    Action, DelaySpec, FaultEngine, Matcher, RejectSpec, Rule, TransportMatch,
+    Action, DelaySpec, FaultEngine, Matcher, RejectSpec, ReorgHandle, Rule, TransportMatch,
 };
 use tokio::time::Instant;
 use tracing::info;
 
 use crate::config::{
     DelayAction, DisconnectAction, DropAction, EventConfig, MalformedAction, MissingLogsAction,
-    RejectAction, Scenario, StaleHeadAction, TimeoutAction,
+    RejectAction, ReorgAction, Scenario, StaleHeadAction, TimeoutAction,
 };
 use crate::ScenarioError;
 
@@ -46,7 +46,7 @@ impl Scenario {
         let mut resolved: Vec<(Duration, usize, Transition, String)> = Vec::new();
         for (i, ev) in self.events.into_iter().enumerate() {
             let at = event_offset(&ev, i)?;
-            let (transition, summary) = compile_event(ev, i)?;
+            let (transition, summary) = compile_event(ev, i, seed)?;
             resolved.push((at, i, transition, summary));
         }
         resolved.sort_by_key(|(at, i, _, _)| (*at, *i));
@@ -150,7 +150,11 @@ fn event_offset(ev: &EventConfig, index: usize) -> Result<Duration, ScenarioErro
     }
 }
 
-fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), ScenarioError> {
+fn compile_event(
+    ev: EventConfig,
+    index: usize,
+    seed: u64,
+) -> Result<(Transition, String), ScenarioError> {
     let set = [
         ev.delay.is_some(),
         ev.timeout.is_some(),
@@ -160,6 +164,7 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
         ev.stale_head.is_some(),
         ev.missing_logs.is_some(),
         ev.malformed.is_some(),
+        ev.reorg.is_some(),
         ev.recover == Some(true),
     ]
     .iter()
@@ -169,7 +174,7 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
         return Err(event_err(
             index,
             format!(
-                "expected exactly one action (delay, timeout, reject, drop, disconnect, stale_head, missing_logs, malformed, recover), found {set}"
+                "expected exactly one action (delay, timeout, reject, drop, disconnect, stale_head, missing_logs, malformed, reorg, recover), found {set}"
             ),
         ));
     }
@@ -200,6 +205,9 @@ fn compile_event(ev: EventConfig, index: usize) -> Result<(Transition, String), 
     }
     if let Some(a) = ev.malformed {
         return compile_malformed(a, index);
+    }
+    if let Some(a) = ev.reorg {
+        return compile_reorg(a, index, seed);
     }
     unreachable!("action count checked above")
 }
@@ -338,6 +346,21 @@ fn compile_malformed(
         Action::Malformed,
         summary,
     )
+}
+
+fn compile_reorg(
+    a: ReorgAction,
+    index: usize,
+    seed: u64,
+) -> Result<(Transition, String), ScenarioError> {
+    let handle = ReorgHandle::new(
+        seed,
+        a.depth,
+        a.remove_logs.unwrap_or(true),
+        a.drop_transactions.unwrap_or(true),
+    );
+    let summary = format!("reorg depth={}", a.depth);
+    chain_rule(index, None, a.probability, Action::Reorg(handle), summary)
 }
 
 fn chain_rule(

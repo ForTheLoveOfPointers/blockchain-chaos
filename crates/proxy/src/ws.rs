@@ -95,6 +95,7 @@ async fn relay(state: AppState, client: WebSocket) -> anyhow::Result<()> {
                             let _ = client_tx.send(AxumMsg::Close(None)).await;
                             break;
                         }
+                        let msg = maybe_reorg_newhead(&state, msg);
                         if let Some(a) = tung_to_axum(msg) {
                             if client_tx.send(a).await.is_err() {
                                 break;
@@ -121,6 +122,22 @@ async fn disconnect_deadline(deadline: Option<Instant>) {
     match deadline {
         Some(at) => tokio::time::sleep_until(at).await,
         None => pending::<()>().await,
+    }
+}
+
+fn maybe_reorg_newhead(state: &AppState, msg: TungMsg) -> TungMsg {
+    let TungMsg::Text(text) = &msg else {
+        return msg;
+    };
+    let Some(reorg) = state.fault.active_reorg() else {
+        return msg;
+    };
+    match reorg.rewrite_newhead(text.as_str()) {
+        Some(rewritten) => {
+            info!(target: "chain_chaos::fault", "rewriting newHeads notification for reorg");
+            TungMsg::Text(rewritten.into())
+        }
+        None => msg,
     }
 }
 

@@ -178,6 +178,22 @@ events:
     }
 
     #[test]
+    fn compiles_reorg_event() {
+        let t = compile(
+            "name: s
+events:
+  - after: 5s
+    reorg: { depth: 3 }
+  - after: 20s
+    recover: true
+",
+        );
+        assert_eq!(t.steps.len(), 2);
+        assert_eq!(t.steps[0].active.len(), 1);
+        assert_eq!(t.steps[1].active.len(), 0);
+    }
+
+    #[test]
     fn rejects_malformed_without_methods() {
         let err = Scenario::from_yaml_str(
             "name: s\nevents:\n  - at: startup\n    malformed: { methods: [] }\n",

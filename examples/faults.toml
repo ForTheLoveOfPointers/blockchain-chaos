@@ -54,3 +54,11 @@ missing_logs = true
 [[faults.rules]]
 methods   = ["eth_call"]
 malformed = true
+
+# Replace the top 2 blocks with an alternative branch (a same-height reorg):
+# the blocks keep their numbers but take new hashes and a re-linked parent
+# chain, logs in the range are removed, and their transactions disappear.
+# Usually driven by a scenario so it switches on and then recovers; as a static
+# rule it is always on. Pins the fork at the head first seen after startup.
+[[faults.rules]]
+reorg = { depth = 2, remove_logs = true, drop_transactions = true }

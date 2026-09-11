@@ -69,6 +69,12 @@ seed: 12345
   each with its own upstream and fault set, so provider A can lag while B has an
   outage and C stays healthy — exercising an application's failover and
   provider-disagreement logic (see [`examples/providers.toml`](examples/providers.toml)).
+- **Reorgs** (Phase 6): a same-height reorg where the top N blocks keep their
+  numbers but take new hashes and a re-linked parent chain, logs in the range are
+  removed, and their transactions disappear — over HTTP *and* `newHeads`. An
+  indexer that tracks block hashes detects a depth-N reorg; one that tracks only
+  numbers silently corrupts. Driven by a scenario, it switches on and then
+  converges on `recover` (see [`scenarios/reorg.yaml`](scenarios/reorg.yaml)).
 
 Built-in assertions and CI integration are still on the roadmap — see
 [`DESIGN.md`](DESIGN.md) and

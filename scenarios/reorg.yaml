@@ -1,0 +1,9 @@
+name: reorg
+seed: 4242
+events:
+  # First 5s healthy: the indexer builds its canonical view of the head.
+  - after: 5s
+    reorg: { depth: 3 }
+  # 15s later the chain converges: real hashes flow again.
+  - after: 20s
+    recover: true

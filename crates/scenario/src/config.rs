@@ -34,6 +34,7 @@ pub struct EventConfig {
     pub stale_head: Option<StaleHeadAction>,
     pub missing_logs: Option<MissingLogsAction>,
     pub malformed: Option<MalformedAction>,
+    pub reorg: Option<ReorgAction>,
     pub recover: Option<bool>,
 }
 
@@ -113,6 +114,15 @@ pub struct MissingLogsAction {
 #[serde(deny_unknown_fields)]
 pub struct MalformedAction {
     pub methods: Vec<String>,
+    pub probability: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReorgAction {
+    pub depth: u64,
+    pub remove_logs: Option<bool>,
+    pub drop_transactions: Option<bool>,
     pub probability: Option<f64>,
 }
 

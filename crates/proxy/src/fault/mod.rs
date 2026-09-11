@@ -14,14 +14,16 @@
 //! forwarding and turns a [`FaultContext`] into a [`FaultDecision`] for
 //! request-side transport faults (delay, timeout, reject, drop, ws-disconnect).
 //! [`FaultEngine::intercept`] runs *after* forwarding and rewrites the upstream
-//! response for chain-aware faults (stale head, missing logs, malformed). Each
-//! rule belongs to exactly one phase, distinguished by [`Action::is_response`],
-//! so a rule's probability is rolled once in the phase that owns it.
+//! response for chain-aware faults (stale head, missing logs, malformed, reorg).
+//! Each rule belongs to exactly one phase, distinguished by
+//! [`Action::is_response`], so a rule's probability is rolled once in the phase
+//! that owns it.
 //!
-//! Chain-aware faults read and rewrite the JSON-RPC result but hold no
-//! cross-request state: a brief window of `StaleHead` under the scenario engine
-//! is what models a reorg (the head jumps back, then forward on recover).
-//! Hash-level fork modelling would need per-connection state and is left open.
+//! Most chain-aware faults read and rewrite the JSON-RPC result but hold no
+//! cross-request state. The [`reorg`] fault is the exception: it carries an
+//! `Arc`-shared model so the fork point stays pinned across a reorg window, and
+//! the WS relay consults [`FaultEngine::active_reorg`] to rewrite `newHeads`
+//! frames the same way.
 //!
 //! Determinism caveat: the RNG is a single shared stream, so under concurrent
 //! requests the *order* of draws is not deterministic and exact replays can
@@ -29,6 +31,7 @@
 //! the real fix.
 
 pub mod config;
+pub mod reorg;
 pub mod rng;
 pub mod rule;
 
@@ -38,6 +41,7 @@ use serde_json::Value;
 
 use crate::rpc::RpcView;
 
+pub use reorg::ReorgHandle;
 use rng::FaultRng;
 pub use rule::{Action, DelaySpec, Matcher, RejectSpec, Rule, Transport, TransportMatch};
 
@@ -114,6 +118,7 @@ impl FaultEngine {
     }
 
     pub fn intercept(&self, ctx: &FaultContext, response: &[u8]) -> Option<Vec<u8>> {
+        let method = single_method(ctx.view);
         let rules = self.rules.read().unwrap();
         for rule in rules.iter() {
             if !rule.action.is_response() {
@@ -125,9 +130,17 @@ impl FaultEngine {
             if !self.rng.chance(rule.probability) {
                 continue;
             }
-            return apply_response(&rule.action, response);
+            return apply_response(&rule.action, method, response);
         }
         None
+    }
+
+    pub fn active_reorg(&self) -> Option<ReorgHandle> {
+        let rules = self.rules.read().unwrap();
+        rules.iter().find_map(|rule| match &rule.action {
+            Action::Reorg(handle) => Some(handle.clone()),
+            _ => None,
+        })
     }
 
     fn resolve(&self, action: &Action) -> FaultDecision {
@@ -137,9 +150,10 @@ impl FaultEngine {
             Action::Reject(spec) => FaultDecision::Reject(spec.clone()),
             Action::Drop => FaultDecision::Drop,
             Action::WsDisconnect(d) => FaultDecision::WsDisconnect(*d),
-            Action::StaleHead { .. } | Action::MissingLogs | Action::Malformed => {
-                FaultDecision::Pass
-            }
+            Action::StaleHead { .. }
+            | Action::MissingLogs
+            | Action::Malformed
+            | Action::Reorg(_) => FaultDecision::Pass,
         }
     }
 
@@ -155,7 +169,17 @@ impl FaultEngine {
     }
 }
 
-fn apply_response(action: &Action, response: &[u8]) -> Option<Vec<u8>> {
+fn single_method(view: &RpcView) -> Option<&str> {
+    match view {
+        RpcView::Single(call) => call.method.as_deref(),
+        _ => None,
+    }
+}
+
+fn apply_response(action: &Action, method: Option<&str>, response: &[u8]) -> Option<Vec<u8>> {
+    if let Action::Reorg(handle) = action {
+        return handle.rewrite(method, response);
+    }
     let mut body: Value = serde_json::from_slice(response).ok()?;
     let obj = body.as_object_mut()?;
     if !obj.contains_key("result") {

@@ -12,6 +12,7 @@ use serde::Deserialize;
 
 use crate::config::ConfigError;
 
+use super::reorg::ReorgHandle;
 use super::rule::{Action, DelaySpec, Matcher, RejectSpec, Rule, TransportMatch};
 use super::FaultEngine;
 
@@ -45,6 +46,15 @@ pub struct RuleConfig {
     pub missing_logs: bool,
     #[serde(default)]
     pub malformed: bool,
+    pub reorg: Option<ReorgConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReorgConfig {
+    pub depth: u64,
+    pub remove_logs: Option<bool>,
+    pub drop_transactions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -82,14 +92,14 @@ impl FaultConfig {
             .rules
             .into_iter()
             .enumerate()
-            .map(|(i, rc)| rc.compile(i))
+            .map(|(i, rc)| rc.compile(i, seed))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(FaultEngine::new(seed, rules))
     }
 }
 
 impl RuleConfig {
-    fn compile(self, index: usize) -> Result<Rule, ConfigError> {
+    fn compile(self, index: usize, seed: u64) -> Result<Rule, ConfigError> {
         let label = self
             .name
             .clone()
@@ -102,7 +112,7 @@ impl RuleConfig {
             ));
         }
 
-        let action = self.collapse_action(&label)?;
+        let action = self.collapse_action(&label, seed)?;
         let methods = self.methods.or_else(|| default_methods(&action));
         let matcher = Matcher {
             methods,
@@ -117,7 +127,7 @@ impl RuleConfig {
         })
     }
 
-    fn collapse_action(&self, label: &str) -> Result<Action, ConfigError> {
+    fn collapse_action(&self, label: &str, seed: u64) -> Result<Action, ConfigError> {
         let mut actions: Vec<Action> = Vec::new();
 
         if let Some(delay) = &self.delay {
@@ -148,11 +158,19 @@ impl RuleConfig {
         if self.malformed {
             actions.push(Action::Malformed);
         }
+        if let Some(reorg) = &self.reorg {
+            actions.push(Action::Reorg(ReorgHandle::new(
+                seed,
+                reorg.depth,
+                reorg.remove_logs.unwrap_or(true),
+                reorg.drop_transactions.unwrap_or(true),
+            )));
+        }
 
         match actions.len() {
             0 => Err(fault_err(
                 label,
-                "no action set (expected one of: delay, timeout, reject, drop, ws_disconnect_after, stale_head, missing_logs, malformed)"
+                "no action set (expected one of: delay, timeout, reject, drop, ws_disconnect_after, stale_head, missing_logs, malformed, reorg)"
                     .to_string(),
             )),
             1 => Ok(actions.pop().expect("len checked")),
@@ -311,5 +329,15 @@ mod tests {
     fn rejects_rule_with_transport_and_chain_action() {
         let err = compile_toml("[[rules]]\nstale_head = 1\ndrop = true\n").unwrap_err();
         assert!(err.to_string().contains("expected exactly one"), "{err}");
+    }
+
+    #[test]
+    fn compiles_reorg_fault() {
+        let engine =
+            compile_toml("seed = 3\n[[rules]]\nreorg = { depth = 2, remove_logs = false }\n")
+                .expect("should compile");
+        assert_eq!(engine.rule_count(), 1);
+        assert!(engine.active_reorg().is_some());
+        assert_eq!(engine.active_reorg().unwrap().depth(), 2);
     }
 }
