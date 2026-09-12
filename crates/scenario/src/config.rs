@@ -3,6 +3,8 @@
 
 use serde::Deserialize;
 
+use crate::assertions::AssertionConfig;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
@@ -10,6 +12,8 @@ pub struct Scenario {
     pub seed: Option<u64>,
     #[serde(default)]
     pub events: Vec<EventConfig>,
+    #[serde(default)]
+    pub assertions: Vec<AssertionConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

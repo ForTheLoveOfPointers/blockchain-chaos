@@ -22,6 +22,10 @@ pub struct Timeline {
     pub name: String,
     pub seed: u64,
     pub steps: Vec<Step>,
+    pub assertions: Vec<crate::assertions::Assertion>,
+    /// Offset of the final `recover`, if any: the point after which the
+    /// recovery and catch-up assertions expect the client to see health again.
+    pub recover_at: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,10 +52,14 @@ impl Scenario {
 
         let mut active: Vec<Rule> = Vec::new();
         let mut steps: Vec<Step> = Vec::new();
+        let mut recover_at: Option<Duration> = None;
         for (at, _i, transition, summary) in resolved {
             match transition {
                 Transition::Add(rule) => active.push(rule),
-                Transition::Recover => active.clear(),
+                Transition::Recover => {
+                    active.clear();
+                    recover_at = Some(at);
+                }
             }
             match steps.last_mut() {
                 Some(last) if last.at == at => {
@@ -67,10 +75,19 @@ impl Scenario {
             }
         }
 
+        let assertions = self
+            .assertions
+            .iter()
+            .enumerate()
+            .map(|(i, a)| a.compile(i))
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Timeline {
             name: self.name,
             seed,
             steps,
+            assertions,
+            recover_at,
         })
     }
 }
@@ -88,6 +105,16 @@ impl Timeline {
         FaultEngine::new(self.seed, self.initial_rules())
     }
 
+    /// The last scheduled offset in the timeline: how long the scenario runs
+    /// before a `test` should start waiting out its grace window.
+    pub fn last_offset(&self) -> Duration {
+        self.steps
+            .iter()
+            .map(|s| s.at)
+            .max()
+            .unwrap_or(Duration::ZERO)
+    }
+
     pub fn describe(&self) -> String {
         let mut out = format!("scenario: {}\nseed: {}\n", self.name, self.seed);
         if self.steps.is_empty() {
@@ -100,6 +127,12 @@ impl Timeline {
                 step.active.len(),
                 step.summary
             ));
+        }
+        if !self.assertions.is_empty() {
+            out.push_str("assertions:\n");
+            for a in &self.assertions {
+                out.push_str(&format!("  - {a:?}\n"));
+            }
         }
         out
     }

@@ -6,12 +6,16 @@ use tracing::info;
 
 use crate::config::ProxyConfig;
 use crate::fault::FaultEngine;
+use crate::observe::Observations;
 
 #[derive(Clone)]
 pub struct AppState {
     pub cfg: Arc<ProxyConfig>,
     pub http_client: reqwest::Client,
     pub fault: Arc<FaultEngine>,
+    /// Present only when a caller (the `test` command) wants delivered traffic
+    /// recorded for assertion evaluation. `None` for a plain proxy.
+    pub observe: Option<Arc<Observations>>,
 }
 
 impl AppState {
@@ -36,6 +40,14 @@ impl AppState {
             cfg: Arc::new(cfg),
             http_client,
             fault,
+            observe: None,
         })
+    }
+
+    /// Attach an observation recorder so delivered traffic is captured for
+    /// assertion evaluation.
+    pub fn with_observations(mut self, obs: Arc<Observations>) -> Self {
+        self.observe = Some(obs);
+        self
     }
 }

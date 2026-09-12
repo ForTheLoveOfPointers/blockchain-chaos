@@ -2,9 +2,13 @@
 //! of rule-set transitions, and [`drive`] swaps the live fault engine's rules as
 //! wall-clock time advances.
 
+pub mod assertions;
 pub mod config;
 pub mod timeline;
 
+pub use assertions::{
+    evaluate_timeline, Assertion, AssertionConfig, AssertionOutcome, Ground,
+};
 pub use config::Scenario;
 pub use timeline::{drive, Step, Timeline};
 

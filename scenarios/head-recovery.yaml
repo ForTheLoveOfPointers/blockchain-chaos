@@ -1,0 +1,25 @@
+# A recovery experiment with a pass/fail verdict.
+#
+#   chain-chaos test scenarios/head-recovery.yaml \
+#       --upstream http://127.0.0.1:8545 \
+#       --app-cmd "cargo run -p block-watcher -- --rpc-url {rpc} --interval 250ms"
+#
+# eth_blockNumber is rejected for the first 2s, then recovers. A resilient client
+# retries through the outage and catches back up, so every assertion holds.
+
+name: head-recovery
+seed: 12345
+
+events:
+  - at: startup
+    reject:
+      methods: [eth_blockNumber]
+      http_status: 503
+      message: upstream down
+  - after: 2s
+    recover: true
+
+assertions:
+  - eventual_recovery
+  - head_monotonic
+  - catches_up: { within: 5s }

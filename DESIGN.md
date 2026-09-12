@@ -43,10 +43,16 @@ In scope today:
 - Same-height reorg modelling: the top N blocks keep their numbers but take new
   hashes, a re-linked parent chain, removed logs, and disappearing transactions,
   over HTTP and `newHeads`, converging on `recover` (Phase 6).
+- Assertions and a verdict: a scenario carries an `assertions:` block, and
+  `chain-chaos test` runs it, drives an application through it, and reports a
+  deterministic pass/fail, exiting non-zero on failure (Phase 8, wire-observable
+  subset).
 
 Out of scope for now, deferred as the roadmap instructs:
 
-- Built-in assertions, test reports, and `chain-chaos test` (Phases 7 and 8).
+- Saved failure artifacts (`timeline.json`, request/response logs) and richer
+  app-state assertions (no-duplicate-events and the like), which need the
+  application's cooperation rather than only the wire.
 
 None of the above required re-architecting what exists: they slot in behind the
 same forwarding seam.
@@ -72,8 +78,24 @@ Crates:
   wire) and asks the `fault` engine for a `FaultDecision`.
 - `crates/scenario`, the deterministic scenario engine. It parses a YAML scenario
   into time-ordered events and drives the proxy's *active rule set* over wall-clock
-  time from a background task. Independent of EVM semantics by design.
-- `crates/cli`, the `chain-chaos` binary (`proxy`, `run`, `cluster`, `inspect`).
+  time from a background task. Independent of EVM semantics by design. It also
+  compiles the scenario's `assertions:` and evaluates them against observed traffic.
+- `crates/cli`, the `chain-chaos` binary (`proxy`, `run`, `test`, `cluster`,
+  `inspect`).
+
+### Assertions (Phase 8)
+
+`chain-chaos test` turns a scenario into a pass/fail experiment. The proxy carries
+an opt-in `Observations` recorder (off for a plain proxy, so there is no cost and no
+unbounded growth) that captures, at the same two choke points, what the client was
+*served*: the delivered head sequence and each delivery's outcome. After the
+scenario plays out, the engine evaluates the scenario's assertions against that
+record plus the true upstream head, snapshotted when the catch-up window closes
+(`recover_at + within`) so the tip compared against is the one the client was
+actually racing rather than a later, higher one. Because it observes only
+the wire, any application works unchanged — the cost is that it sees the stimulus,
+not the application's internal state, so invariants like "no duplicate events" are
+left to a later phase that the application opts into.
 
 Key invariant: transparency survives the pass path. When no fault fires, the
 original request and response bytes are forwarded untouched, which preserves

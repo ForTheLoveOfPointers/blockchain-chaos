@@ -6,6 +6,7 @@ pub mod cluster;
 pub mod config;
 pub mod fault;
 pub mod http;
+pub mod observe;
 pub mod rpc;
 pub mod state;
 pub mod ws;
@@ -16,6 +17,7 @@ use tracing::info;
 
 pub use cluster::{run_cluster, ClusterConfig, ProviderConfig};
 pub use config::{ConfigError, FileConfig, ProxyConfig};
+pub use observe::Observations;
 pub use state::AppState;
 
 pub fn router(state: AppState) -> Router {

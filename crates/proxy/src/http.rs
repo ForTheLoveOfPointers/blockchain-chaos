@@ -38,14 +38,17 @@ async fn forward(state: &AppState, body: Bytes) -> Response {
         FaultDecision::Timeout(d) => {
             info!(target: "chain_chaos::fault", rpc = %view.summary(), hold_ms = d.as_millis(), "injecting timeout");
             tokio::time::sleep(d).await;
+            record(state, &view, b"", true, false);
             return reject_response(&view, &timeout_spec());
         }
         FaultDecision::Reject(spec) => {
             info!(target: "chain_chaos::fault", rpc = %view.summary(), http_status = spec.http_status, code = spec.code, "injecting rejection");
+            record(state, &view, b"", true, false);
             return reject_response(&view, &spec);
         }
         FaultDecision::Drop => {
             info!(target: "chain_chaos::fault", rpc = %view.summary(), "injecting connection drop");
+            record(state, &view, b"", true, false);
             return drop_response();
         }
         FaultDecision::WsDisconnect(_) => {}
@@ -108,6 +111,8 @@ async fn forward_upstream(state: &AppState, view: &RpcView, body: Bytes) -> Resp
                 info!(target: "chain_chaos::http", %status, elapsed_ms, bytes = bytes.len(), "<- upstream");
             }
 
+            record(state, view, &bytes, false, status.is_success());
+
             (
                 StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
                 [(header::CONTENT_TYPE, "application/json")],
@@ -117,8 +122,16 @@ async fn forward_upstream(state: &AppState, view: &RpcView, body: Bytes) -> Resp
         }
         Err(e) => {
             warn!(target: "chain_chaos::http", error = %e, elapsed_ms, "upstream request failed");
+            record(state, view, b"", false, false);
             (StatusCode::BAD_GATEWAY, format!("upstream error: {e}")).into_response()
         }
+    }
+}
+
+/// Record a delivered HTTP response when observation is enabled; a no-op otherwise.
+fn record(state: &AppState, view: &RpcView, delivered: &[u8], faulted: bool, ok: bool) {
+    if let Some(obs) = &state.observe {
+        obs.record_http(view, delivered, faulted, ok);
     }
 }
 

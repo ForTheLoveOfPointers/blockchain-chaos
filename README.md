@@ -75,10 +75,48 @@ seed: 12345
   block hashes detects a depth-N reorg; one that tracks only numbers silently
   corrupts. Driven by a scenario, it switches on and then converges on `recover`
   (see [`scenarios/reorg.yaml`](scenarios/reorg.yaml)).
+- **Assertions and a verdict** (Phase 8): a scenario can carry an `assertions:`
+  block, and `chain-chaos test` runs it, drives your application through it, and
+  reports a deterministic `[PASS]`/`[FAIL]` per assertion, exiting non-zero on
+  failure. Assertions observe what the proxy *delivers to the client*, so any
+  application works unchanged: `head_monotonic` (the delivered head never jumps
+  backward), `eventual_recovery` (deliveries succeed again after `recover`), and
+  `catches_up` (the delivered head reaches the true tip). See
+  [`scenarios/stale-head-trap.yaml`](scenarios/stale-head-trap.yaml) for a
+  deterministic failure and [`scenarios/head-recovery.yaml`](scenarios/head-recovery.yaml)
+  for a clean pass.
 
-Built-in assertions and CI integration are still on the roadmap. See
-[`DESIGN.md`](DESIGN.md) and
+Test reports as saved artifacts, richer app-state assertions, and CI templates are
+still on the roadmap. See [`DESIGN.md`](DESIGN.md) and
 [`blockchain-chaos-roadmap.txt`](blockchain-chaos-roadmap.txt).
+
+## Get a verdict
+
+Turn a scenario into a pass/fail test. `chain-chaos test` runs the scenario, drives
+your app through the proxy (`{rpc}` is replaced with the proxy URL), and evaluates
+the scenario's `assertions:` against what your app was served:
+
+```sh
+# a moving head, then the trap: 3s in, the provider reports a head 5 blocks behind
+anvil --block-time 1
+chain-chaos test scenarios/stale-head-trap.yaml \
+    --upstream http://127.0.0.1:8545 \
+    --app-cmd "cargo run -p block-watcher -- --rpc-url {rpc} --interval 250ms"
+```
+
+```
+Scenario: stale-head-trap
+Seed: 12345
+
+[FAIL] head_monotonic — delivered head went backward to 0 (below prior max 4) at 3s
+
+1 of 1 assertion(s) failed. Reproduce with:
+    chain-chaos test <scenario> --upstream <url> --seed 12345
+```
+
+Without `--app-cmd`, point your own application at the proxy's listen address while
+the test runs. Every fault and every assertion derives from the seed, so a failure
+reproduces exactly.
 
 ## Ways to inject faults
 
@@ -114,9 +152,9 @@ events:
 
 ```
 crates/
-  proxy/     # HTTP + WS pass-through, fault engine, config, logging
-  scenario/  # deterministic YAML scenario engine
-  cli/       # `chain-chaos` binary: proxy / run / cluster / inspect
+  proxy/     # HTTP + WS pass-through, fault engine, config, logging, observation
+  scenario/  # deterministic YAML scenario engine + assertions
+  cli/       # `chain-chaos` binary: proxy / run / test / cluster / inspect
 examples/
   faults.toml       # static fault config
   providers.toml    # multi-provider cluster config

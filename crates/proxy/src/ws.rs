@@ -89,6 +89,9 @@ async fn relay(state: AppState, client: WebSocket) -> anyhow::Result<()> {
                             break;
                         }
                         let msg = maybe_reorg_newhead(&state, msg);
+                        if let (Some(obs), TungMsg::Text(t)) = (&state.observe, &msg) {
+                            obs.record_newhead(t.as_str());
+                        }
                         if let Some(a) = tung_to_axum(msg) {
                             if client_tx.send(a).await.is_err() {
                                 break;

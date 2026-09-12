@@ -1,0 +1,20 @@
+# A trap that catches a client which trusts a provider's head blindly.
+#
+#   chain-chaos test scenarios/stale-head-trap.yaml \
+#       --upstream http://127.0.0.1:8545 \
+#       --app-cmd "cargo run -p block-watcher -- --rpc-url {rpc} --interval 250ms"
+#
+# The run starts healthy, so the client watches the head climb. 3s in, the provider
+# starts reporting a head 5 blocks behind reality: the delivered head jumps
+# backward, and `head_monotonic` fails. This is a real, deterministic failure a
+# number-only consumer would silently accept.
+
+name: stale-head-trap
+seed: 12345
+
+events:
+  - after: 3s
+    stale_head: { blocks: 5 }
+
+assertions:
+  - head_monotonic
