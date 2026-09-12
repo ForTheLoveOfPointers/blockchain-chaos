@@ -48,7 +48,7 @@ In scope today:
   deterministic pass/fail, exiting non-zero on failure (Phase 8, wire-observable
   subset).
 
-Out of scope for now, deferred as the roadmap instructs:
+Out of scope for now, deferred deliberately:
 
 - Saved failure artifacts (`timeline.json`, request/response logs) and richer
   app-state assertions (no-duplicate-events and the like), which need the

@@ -87,8 +87,8 @@ seed: 12345
   for a clean pass.
 
 Test reports as saved artifacts, richer app-state assertions, and CI templates are
-still on the roadmap. See [`DESIGN.md`](DESIGN.md) and
-[`blockchain-chaos-roadmap.txt`](blockchain-chaos-roadmap.txt).
+still ahead. See [`DESIGN.md`](DESIGN.md) for the problem statement, architecture,
+fault model, and non-goals.
 
 ## Get a verdict
 
