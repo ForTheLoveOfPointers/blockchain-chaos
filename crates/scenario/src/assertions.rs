@@ -69,9 +69,8 @@ impl AssertionConfig {
         };
 
         let within = match &params.within {
-            Some(s) => humantime::parse_duration(s).map_err(|e| {
-                assertion_err(index, format!("invalid `within` (`{s}`): {e}"))
-            })?,
+            Some(s) => humantime::parse_duration(s)
+                .map_err(|e| assertion_err(index, format!("invalid `within` (`{s}`): {e}")))?,
             None => DEFAULT_WITHIN,
         };
 
@@ -130,9 +129,7 @@ pub fn evaluate(
         .iter()
         .map(|a| match a {
             Assertion::HeadMonotonic => head_monotonic(&heads),
-            Assertion::EventualRecovery { within } => {
-                eventual_recovery(&deliveries, base, *within)
-            }
+            Assertion::EventualRecovery { within } => eventual_recovery(&deliveries, base, *within),
             Assertion::CatchesUp { within } => {
                 catches_up(&heads, ground.upstream_head, base, *within)
             }
@@ -159,7 +156,10 @@ fn head_monotonic(heads: &[(Duration, u64)]) -> AssertionOutcome {
     if !seen {
         return fail("head_monotonic", "no head was delivered".to_string());
     }
-    pass("head_monotonic", format!("{} heads, peak {max}", heads.len()))
+    pass(
+        "head_monotonic",
+        format!("{} heads, peak {max}", heads.len()),
+    )
 }
 
 fn eventual_recovery(
@@ -229,9 +229,7 @@ fn catches_up(
         ),
         Some(h) => fail(
             "catches_up",
-            format!(
-                "delivered head only reached {h} within the window, upstream was {target}"
-            ),
+            format!("delivered head only reached {h} within the window, upstream was {target}"),
         ),
         None => fail(
             "catches_up",

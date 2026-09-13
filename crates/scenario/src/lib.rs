@@ -6,9 +6,7 @@ pub mod assertions;
 pub mod config;
 pub mod timeline;
 
-pub use assertions::{
-    evaluate_timeline, Assertion, AssertionConfig, AssertionOutcome, Ground,
-};
+pub use assertions::{evaluate_timeline, Assertion, AssertionConfig, AssertionOutcome, Ground};
 pub use config::Scenario;
 pub use timeline::{drive, Step, Timeline};
 

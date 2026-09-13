@@ -312,10 +312,7 @@ async fn run_test(args: TestArgs) -> Result<bool> {
 fn spawn_app(cmd: &str, proxy_url: &str) -> Result<tokio::process::Child> {
     let substituted = cmd.replace("{rpc}", proxy_url);
     let mut parts = substituted.split_whitespace();
-    let program = parts
-        .next()
-        .context("--app-cmd is empty")?
-        .to_string();
+    let program = parts.next().context("--app-cmd is empty")?.to_string();
     let rest: Vec<String> = parts.map(str::to_owned).collect();
     info!(target: "chain_chaos", cmd = %substituted, "spawning app under test");
     tokio::process::Command::new(program)

@@ -42,7 +42,11 @@ async fn wait_ready(client: &reqwest::Client, url: &str) {
 
 /// Run a scenario through the proxy while block-watcher polls it, then evaluate the
 /// scenario's assertions against what the proxy delivered.
-async fn run_assertions(port: u16, scenario_yaml: &str, run_for: Duration) -> Vec<AssertionOutcome> {
+async fn run_assertions(
+    port: u16,
+    scenario_yaml: &str,
+    run_for: Duration,
+) -> Vec<AssertionOutcome> {
     let client = reqwest::Client::new();
     let upstream = format!("http://127.0.0.1:{port}");
     wait_ready(&client, &upstream).await;
