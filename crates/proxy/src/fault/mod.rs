@@ -1,14 +1,14 @@
 //! The fault engine. `decide` runs before forwarding for transport faults;
 //! `intercept` runs after for response-rewriting chain faults. Each rule belongs
-//! to one phase. All randomness is one seeded stream, so replays are exact for a
-//! single client but not under concurrency.
+//! to one phase. Fault rolls are keyed by the seed, transport, request identity,
+//! request occurrence, and rule index, so concurrent replays stay reproducible.
 
 pub mod config;
 pub mod reorg;
 pub mod rng;
 pub mod rule;
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use serde_json::Value;
 
@@ -22,6 +22,7 @@ pub struct FaultEngine {
     seed: u64,
     rules: std::sync::RwLock<Vec<Rule>>,
     rng: FaultRng,
+    request_counters: std::sync::Mutex<HashMap<String, u64>>,
 }
 
 impl std::fmt::Debug for FaultEngine {
@@ -54,6 +55,7 @@ impl FaultEngine {
             seed,
             rules: std::sync::RwLock::new(rules),
             rng: FaultRng::from_seed(seed),
+            request_counters: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -74,33 +76,41 @@ impl FaultEngine {
     }
 
     pub fn decide(&self, ctx: &FaultContext) -> FaultDecision {
+        let request_key = self.request_key(ctx);
         let rules = self.rules.read().unwrap();
-        for rule in rules.iter() {
+        for (rule_index, rule) in rules.iter().enumerate() {
             if rule.action.is_response() {
                 continue;
             }
             if !rule.matcher.matches(ctx.transport, ctx.view) {
                 continue;
             }
-            if !self.rng.chance(rule.probability) {
+            if !self
+                .rng
+                .keyed_chance(&request_key, rule_index, rule.probability)
+            {
                 continue;
             }
-            return self.resolve(&rule.action);
+            return self.resolve(&rule.action, &request_key, rule_index);
         }
         FaultDecision::Pass
     }
 
     pub fn intercept(&self, ctx: &FaultContext, response: &[u8]) -> Option<Vec<u8>> {
+        let request_key = self.request_key(ctx);
         let method = single_method(ctx.view);
         let rules = self.rules.read().unwrap();
-        for rule in rules.iter() {
+        for (rule_index, rule) in rules.iter().enumerate() {
             if !rule.action.is_response() {
                 continue;
             }
             if !rule.matcher.matches(ctx.transport, ctx.view) {
                 continue;
             }
-            if !self.rng.chance(rule.probability) {
+            if !self
+                .rng
+                .keyed_chance(&request_key, rule_index, rule.probability)
+            {
                 continue;
             }
             return apply_response(&rule.action, method, response);
@@ -116,9 +126,20 @@ impl FaultEngine {
         })
     }
 
-    fn resolve(&self, action: &Action) -> FaultDecision {
+    fn request_key(&self, ctx: &FaultContext) -> String {
+        let base = format!("{:?}:{}", ctx.transport, ctx.view.stable_key());
+        let mut counters = self.request_counters.lock().unwrap();
+        let counter = counters.entry(base.clone()).or_default();
+        let key = format!("{base}#{counter}");
+        *counter += 1;
+        key
+    }
+
+    fn resolve(&self, action: &Action, request_key: &str, rule_index: usize) -> FaultDecision {
         match action {
-            Action::Delay(spec) => FaultDecision::Delay(self.sample_delay(spec)),
+            Action::Delay(spec) => {
+                FaultDecision::Delay(self.sample_delay(spec, request_key, rule_index))
+            }
             Action::Timeout(d) => FaultDecision::Timeout(*d),
             Action::Reject(spec) => FaultDecision::Reject(spec.clone()),
             Action::Drop => FaultDecision::Drop,
@@ -130,13 +151,13 @@ impl FaultEngine {
         }
     }
 
-    fn sample_delay(&self, spec: &DelaySpec) -> Duration {
+    fn sample_delay(&self, spec: &DelaySpec, request_key: &str, rule_index: usize) -> Duration {
         match spec {
             DelaySpec::Fixed(d) => *d,
             DelaySpec::Range { min, max } => {
                 let lo = min.as_millis() as u64;
                 let hi = max.as_millis() as u64;
-                Duration::from_millis(self.rng.range_ms(lo, hi))
+                Duration::from_millis(self.rng.keyed_range_ms(request_key, rule_index, lo, hi))
             }
         }
     }
@@ -262,6 +283,58 @@ mod tests {
                 matches!(db, FaultDecision::Drop),
             );
         }
+    }
+
+    #[test]
+    fn keyed_decisions_are_stable_under_concurrent_interleavings() {
+        use std::{
+            collections::BTreeMap,
+            sync::{Arc, Barrier},
+            thread,
+        };
+
+        let src = "seed = 99\n[[rules]]\nprobability = 0.5\ndrop = true\n";
+        let ids: Vec<u64> = (0..64).collect();
+        let sequential_engine = engine(src);
+        let sequential: BTreeMap<_, _> = ids
+            .iter()
+            .map(|id| {
+                let body = format!(r#"{{"method":"eth_call","id":{id}}}"#);
+                let request = RpcView::parse(body.as_bytes());
+                let decision = sequential_engine.decide(&FaultContext {
+                    transport: Transport::Http,
+                    view: &request,
+                });
+                (*id, matches!(decision, FaultDecision::Drop))
+            })
+            .collect();
+
+        let concurrent_engine = Arc::new(engine(src));
+        let barrier = Arc::new(Barrier::new(ids.len()));
+        let handles: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                let engine = Arc::clone(&concurrent_engine);
+                let barrier = Arc::clone(&barrier);
+                let id = *id;
+                thread::spawn(move || {
+                    let body = format!(r#"{{"method":"eth_call","id":{id}}}"#);
+                    let request = RpcView::parse(body.as_bytes());
+                    barrier.wait();
+                    let decision = engine.decide(&FaultContext {
+                        transport: Transport::Http,
+                        view: &request,
+                    });
+                    (id, matches!(decision, FaultDecision::Drop))
+                })
+            })
+            .collect();
+        let concurrent: BTreeMap<_, _> = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect();
+
+        assert_eq!(concurrent, sequential);
     }
 
     fn response_rule(methods: &[&str], action: Action) -> Rule {

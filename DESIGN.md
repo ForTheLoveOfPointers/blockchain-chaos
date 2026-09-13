@@ -116,10 +116,13 @@ others.
 ### Determinism
 
 All randomness derives from a single seed via `ChaCha8Rng` (stable across platforms,
-unlike `StdRng`). The engine logs the seed on startup so any run can be replayed. One
-caveat: the RNG is a single shared stream, so under concurrent requests the *order*
-of draws is not deterministic, and exact replay assumes a single client driving
-requests in sequence. A keyed per-request RNG is the eventual fix.
+unlike `StdRng`). The engine logs the seed on startup so any run can be replayed. Each
+fault roll is derived from the seed, transport, request method and JSON-RPC id, that
+request key's occurrence counter, and the rule index. This keeps a request's
+decision stable when concurrent requests arrive in a different order. Reusing the
+same method and id is supported, but its occurrence counter is assigned in arrival
+order, so callers should use unique JSON-RPC ids when they need to identify repeated
+requests in a replay.
 
 ### The fault seam (two phases)
 

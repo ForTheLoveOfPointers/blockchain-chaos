@@ -26,6 +26,22 @@ impl RpcView {
         }
     }
 
+    /// Stable identity for deterministic per-request fault decisions.
+    pub fn stable_key(&self) -> String {
+        match self {
+            RpcView::Single(call) => format!("{}:{}", method_str(call), id_str(call)),
+            RpcView::Batch(calls) => {
+                let key = calls
+                    .iter()
+                    .map(|call| format!("{}:{}", method_str(call), id_str(call)))
+                    .collect::<Vec<_>>()
+                    .join("|");
+                format!("batch:{key}")
+            }
+            RpcView::Unknown => "unknown".to_string(),
+        }
+    }
+
     pub fn summary(&self) -> String {
         match self {
             RpcView::Single(c) => format!("{} id={}", method_str(c), id_str(c)),
