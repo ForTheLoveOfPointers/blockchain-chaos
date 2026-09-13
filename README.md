@@ -1,5 +1,7 @@
 # chain-chaos
 
+[![CI](https://github.com/ForTheLoveOfPointers/blockchain-chaos/actions/workflows/ci.yml/badge.svg)](https://github.com/ForTheLoveOfPointers/blockchain-chaos/actions/workflows/ci.yml)
+
 **Chaos testing for blockchain infrastructure.**
 
 ```
@@ -20,6 +22,15 @@ directly on the path between your app and the chain.
 
 The question it answers: *does my application stay correct when the blockchain and
 its infrastructure behave badly?*
+
+## Install
+
+```sh
+cargo install --git https://github.com/ForTheLoveOfPointers/blockchain-chaos chain-chaos --locked
+```
+
+Requires Rust 1.80+. Anvil (Foundry) is only needed to run the integration tests;
+the proxy itself talks to whatever upstream RPC URL you give it.
 
 ## Try it
 
