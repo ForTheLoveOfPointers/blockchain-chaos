@@ -1,0 +1,11 @@
+# Code owners for this repository.
+#
+# The owner listed here is automatically requested for review on any pull
+# request that touches matching files, and — together with the branch
+# protection rule on `main` (require a PR + require code owner review) —
+# no change can be merged without their approval.
+#
+# The last matching pattern takes precedence, so this catch-all makes the
+# owner responsible for every path in the repo.
+
+* @ForTheLoveOfPointers
