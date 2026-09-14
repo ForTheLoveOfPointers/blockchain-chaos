@@ -1,11 +1,11 @@
 //! Wire types for the YAML scenario format: a name, a seed, and time-triggered
 //! events, each carrying one action. The only place that knows YAML field names.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::assertions::AssertionConfig;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
     pub name: String,
@@ -16,7 +16,7 @@ pub struct Scenario {
     pub assertions: Vec<AssertionConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EventConfig {
     pub at: Option<String>,
@@ -34,7 +34,7 @@ pub struct EventConfig {
     pub recover: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransportSel {
     Http,
@@ -43,7 +43,7 @@ pub enum TransportSel {
     Both,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DelayAction {
     pub methods: Option<Vec<String>>,
@@ -55,7 +55,7 @@ pub struct DelayAction {
     pub max: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutAction {
     pub methods: Option<Vec<String>>,
@@ -65,7 +65,7 @@ pub struct TimeoutAction {
     pub duration: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RejectAction {
     pub methods: Option<Vec<String>>,
@@ -77,7 +77,7 @@ pub struct RejectAction {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DropAction {
     pub methods: Option<Vec<String>>,
@@ -86,34 +86,34 @@ pub struct DropAction {
     pub probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DisconnectAction {
     pub probability: Option<f64>,
     pub after: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StaleHeadAction {
     pub probability: Option<f64>,
     pub blocks: u64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MissingLogsAction {
     pub probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MalformedAction {
     pub methods: Vec<String>,
     pub probability: Option<f64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReorgAction {
     pub depth: u64,

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use chain_chaos_proxy::observe::{Delivery, Observations};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ScenarioError;
 
@@ -32,14 +32,14 @@ pub enum Assertion {
 
 /// Wire form: either a bare name (`head_monotonic`) or a single-key map carrying
 /// parameters (`catches_up: { within: 5s }`).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum AssertionConfig {
     Simple(String),
     Mapped(BTreeMap<String, AssertionParams>),
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AssertionParams {
     pub within: Option<String>,

@@ -10,6 +10,7 @@ pub mod rule;
 
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::rpc::RpcView;
@@ -38,7 +39,7 @@ pub struct FaultContext<'a> {
     pub view: &'a RpcView,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FaultDecision {
     Pass,
     Delay(Duration),

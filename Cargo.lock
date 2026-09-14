@@ -848,6 +848,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "observability"
+version = "0.0.1"
+dependencies = [
+ "chain-chaos-proxy",
+ "chain-chaos-scenario",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
