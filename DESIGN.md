@@ -122,7 +122,10 @@ request key's occurrence counter, and the rule index. This keeps a request's
 decision stable when concurrent requests arrive in a different order. Reusing the
 same method and id is supported, but its occurrence counter is assigned in arrival
 order, so callers should use unique JSON-RPC ids when they need to identify repeated
-requests in a replay.
+requests in a replay. The engine retains counters for at most 4096 distinct request
+keys. When that bound is reached, it evicts the lexicographically first key, so a
+key that returns after eviction starts at occurrence zero again. This bounds memory
+for long-running servers while keeping eviction deterministic.
 
 ### The fault seam (two phases)
 
