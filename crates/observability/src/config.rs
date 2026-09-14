@@ -46,5 +46,8 @@ pub struct EventLog {
 pub enum EventDetail {
     Decision(FaultDecision),
     Action(chain_chaos_proxy::fault::Action),
-    ScenarioEvent(EventConfig),
+    // Boxed: `EventConfig` is ~536 bytes, far larger than the other variants, so
+    // an unboxed variant bloats every buffered `EventLog`. Box keeps the enum
+    // small (and satisfies `clippy::large_enum_variant`).
+    ScenarioEvent(Box<EventConfig>),
 }
