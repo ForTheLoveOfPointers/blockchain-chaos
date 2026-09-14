@@ -1,12 +1,14 @@
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 pub struct FaultRng {
+    seed: u64,
     rng: std::sync::Mutex<ChaCha8Rng>,
 }
 
 impl FaultRng {
     pub fn from_seed(seed: u64) -> Self {
         FaultRng {
+            seed,
             rng: std::sync::Mutex::new(ChaCha8Rng::seed_from_u64(seed)),
         }
     }
@@ -29,6 +31,32 @@ impl FaultRng {
             return false;
         }
         self.next() < p
+    }
+
+    pub fn keyed_chance(&self, key: &str, rule_index: usize, p: f64) -> bool {
+        if p >= 1.0 {
+            return true;
+        }
+        if p <= 0.0 {
+            return false;
+        }
+        self.keyed_rng(key, rule_index).random::<f64>() < p
+    }
+
+    pub fn keyed_range_ms(&self, key: &str, rule_index: usize, lo: u64, hi: u64) -> u64 {
+        if hi <= lo {
+            return lo;
+        }
+        self.keyed_rng(key, rule_index).random_range(lo..hi)
+    }
+
+    fn keyed_rng(&self, key: &str, rule_index: usize) -> ChaCha8Rng {
+        let mut mixed = self.seed ^ 0x9e3779b97f4a7c15;
+        for byte in key.bytes().chain((rule_index as u64).to_le_bytes()) {
+            mixed ^= u64::from(byte);
+            mixed = mixed.wrapping_mul(0x100000001b3);
+        }
+        ChaCha8Rng::seed_from_u64(mixed)
     }
 }
 
