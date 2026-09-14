@@ -219,9 +219,11 @@ dependencies = [
  "chain-chaos-scenario",
  "clap",
  "humantime",
+ "observability",
  "reqwest",
  "serde_json",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]
