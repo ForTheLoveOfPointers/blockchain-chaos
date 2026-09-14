@@ -19,7 +19,9 @@ pub struct ObservabilityEngineConfig {
     pub enabled: bool,
     pub level: LoggingLevel,
     pub buffer: u32,
-    pub exporter: Vec<String>, // Vendors like Prometheus, OTel, etc.
+    /// Names of the exporters to enable (e.g. "json-stdout", "prometheus").
+    /// The engine turns these into live `Box<dyn Exporter>` sinks at startup.
+    pub exporter: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

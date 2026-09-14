@@ -8,6 +8,9 @@
 
 pub mod config;
 
+pub mod exporters;
+
 pub mod engine;
+
 
 pub fn serve_metrics() {}

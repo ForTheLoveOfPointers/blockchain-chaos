@@ -1,17 +1,11 @@
-use std::{collections::VecDeque, io::Write, sync::Mutex, time::SystemTime};
+use std::{collections::VecDeque, sync::Mutex, time::SystemTime};
 
 use chain_chaos_scenario::Scenario;
 
-use crate::config::{EventDetail, EventLog, LoggingLevel, ObservabilityEngineConfig};
-
-pub trait Exporter: Send + Sync {
-
-    fn export(&self, event: &EventLog);
-
-    fn name(&self) -> &str;
-
-    fn flush(&self) {}
-}
+use crate::{
+    config::{EventDetail, EventLog, LoggingLevel, ObservabilityEngineConfig},
+    exporters::{json_stdout::JsonStdout, Exporter},
+};
 
 #[derive(Debug)]
 struct InnerEvents {
@@ -22,15 +16,36 @@ struct InnerEvents {
 pub struct ObservabilityEngine {
     pub config: ObservabilityEngineConfig,
     inner: Mutex<InnerEvents>,
+    exporters: Vec<Box<dyn Exporter>>,
+}
+
+/// Turns the configured exporter names into live sinks.
+/// Unknown names are skipped with a warning rather than failing startup.
+fn build_exporters(config: &ObservabilityEngineConfig) -> Vec<Box<dyn Exporter>> {
+    config
+        .exporter
+        .iter()
+        .filter_map(|name| -> Option<Box<dyn Exporter>> {
+            match name.as_str() {
+                "json-stdout" => Some(Box::new(JsonStdout::new())),
+                other => {
+                    eprintln!("observability: unknown exporter {other:?}, skipping");
+                    None
+                }
+            }
+        })
+        .collect()
 }
 
 impl ObservabilityEngine {
     pub fn new(config: ObservabilityEngineConfig) -> Self {
+        let exporters = build_exporters(&config);
         ObservabilityEngine {
             config,
             inner: Mutex::new(InnerEvents {
                 events: VecDeque::new(),
             }),
+            exporters,
         }
     }
 
@@ -58,20 +73,13 @@ impl ObservabilityEngine {
 
         inner.events.push_back(log);
 
+        // Fan out the just-recorded event to every configured sink.
+        if let Some(event) = inner.events.back() {
+            for exporter in &self.exporters {
+                exporter.export(event);
+            }
+        }
+
         true
     }
-}
-
-impl Exporter for ObservabilityEngine  {
-    fn export(&self, event: &EventLog) {
-        if let Ok(line) = serde_json::to_string(event) {
-            writeln!(std::io::stdout().lock(), "{line}").expect("Failed to writeln!");
-        }
-    }
-
-    fn name(&self) -> &str {
-        self.config.exporter[0].as_str()
-    }
-
-    fn flush(&self) {}
 }
