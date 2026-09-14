@@ -39,10 +39,15 @@ async fn relay(state: AppState, client: WebSocket) -> anyhow::Result<()> {
 
     let log_bodies = state.cfg.log_bodies;
 
-    let disconnect_at = match state.fault.decide(&FaultContext {
+    let connect_ctx = FaultContext {
         transport: Transport::Ws,
         view: &RpcView::Unknown,
-    }) {
+    };
+    let connect_decision = state.fault.decide(&connect_ctx);
+    if let Some(observer) = &state.fault_observer {
+        observer.on_decision(&connect_ctx, &connect_decision);
+    }
+    let disconnect_at = match connect_decision {
         FaultDecision::WsDisconnect(d) => {
             info!(target: "chain_chaos::fault", after_ms = d.as_millis(), "scheduling websocket disconnect");
             Some(Instant::now() + d)
@@ -142,10 +147,15 @@ async fn maybe_delay_client_msg(state: &AppState, msg: &AxumMsg) {
         return;
     };
     let view = RpcView::parse(t.as_bytes());
-    if let FaultDecision::Delay(d) = state.fault.decide(&FaultContext {
+    let ctx = FaultContext {
         transport: Transport::Ws,
         view: &view,
-    }) {
+    };
+    let decision = state.fault.decide(&ctx);
+    if let Some(observer) = &state.fault_observer {
+        observer.on_decision(&ctx, &decision);
+    }
+    if let FaultDecision::Delay(d) = decision {
         info!(target: "chain_chaos::fault", rpc = %view.summary(), delay_ms = d.as_millis(), "injecting websocket latency");
         tokio::time::sleep(d).await;
     }

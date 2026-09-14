@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, sync::Mutex, time::SystemTime};
 
+use chain_chaos_proxy::fault::{FaultContext, FaultDecision, FaultObserver};
 use chain_chaos_scenario::Scenario;
 
 use crate::{
@@ -81,5 +82,18 @@ impl ObservabilityEngine {
         }
 
         true
+    }
+}
+
+impl FaultObserver for ObservabilityEngine {
+    /// Bridges a proxy fault decision into an observability event. Runs on the
+    /// request hot path, so it only records (buffer + export) and returns; the
+    /// `record` short-circuits cheaply when the engine is disabled.
+    fn on_decision(&self, _ctx: &FaultContext, decision: &FaultDecision) {
+        self.record(
+            LoggingLevel::Info,
+            None,
+            EventDetail::Decision(decision.clone()),
+        );
     }
 }

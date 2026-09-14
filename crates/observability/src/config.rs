@@ -24,6 +24,17 @@ pub struct ObservabilityEngineConfig {
     pub exporter: Vec<String>,
 }
 
+impl Default for ObservabilityEngineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            level: LoggingLevel::Info,
+            buffer: 1024,
+            exporter: vec![String::from("json-stdout")],
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct EventLog {
     pub timestamp: SystemTime,

@@ -49,6 +49,10 @@ pub enum FaultDecision {
     WsDisconnect(Duration),
 }
 
+pub trait FaultObserver: Send + Sync {
+    fn on_decision(&self, ctx: &FaultContext, decision: &FaultDecision);
+}
+
 impl FaultEngine {
     pub fn new(seed: u64, rules: Vec<Rule>) -> Self {
         Self {
