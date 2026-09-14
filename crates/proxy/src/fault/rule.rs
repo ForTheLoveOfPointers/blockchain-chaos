@@ -3,6 +3,8 @@
 
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::fault::reorg::ReorgHandle;
 use crate::rpc::RpcView;
 
@@ -33,7 +35,7 @@ pub enum TransportMatch {
     Both,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Action {
     Delay(DelaySpec),
     Timeout(Duration),
@@ -55,13 +57,13 @@ impl Action {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DelaySpec {
     Fixed(Duration),
     Range { min: Duration, max: Duration },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RejectSpec {
     pub http_status: u16,
     pub code: i64,

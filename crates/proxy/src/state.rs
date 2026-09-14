@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::config::ProxyConfig;
-use crate::fault::FaultEngine;
+use crate::fault::{FaultEngine, FaultObserver};
 use crate::observe::Observations;
 
 #[derive(Clone)]
@@ -16,6 +16,9 @@ pub struct AppState {
     /// Present only when a caller (the `test` command) wants delivered traffic
     /// recorded for assertion evaluation. `None` for a plain proxy.
     pub observe: Option<Arc<Observations>>,
+    /// Optional sink notified of every fault decision (e.g. the observability
+    /// engine). `None` leaves the proxy silent, as before.
+    pub fault_observer: Option<Arc<dyn FaultObserver>>,
 }
 
 impl AppState {
@@ -41,6 +44,7 @@ impl AppState {
             http_client,
             fault,
             observe: None,
+            fault_observer: None,
         })
     }
 
@@ -48,6 +52,13 @@ impl AppState {
     /// assertion evaluation.
     pub fn with_observations(mut self, obs: Arc<Observations>) -> Self {
         self.observe = Some(obs);
+        self
+    }
+
+    /// Attach a fault-decision observer so each decision is reported to an
+    /// external sink (e.g. the observability engine).
+    pub fn with_fault_observer(mut self, observer: Arc<dyn FaultObserver>) -> Self {
+        self.fault_observer = Some(observer);
         self
     }
 }

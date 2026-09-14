@@ -10,6 +10,7 @@ pub mod rule;
 
 use std::{collections::BTreeMap, time::Duration};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::rpc::RpcView;
@@ -42,7 +43,7 @@ pub struct FaultContext<'a> {
     pub view: &'a RpcView,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FaultDecision {
     Pass,
     Delay(Duration),
@@ -50,6 +51,10 @@ pub enum FaultDecision {
     Reject(RejectSpec),
     Drop,
     WsDisconnect(Duration),
+}
+
+pub trait FaultObserver: Send + Sync {
+    fn on_decision(&self, ctx: &FaultContext, decision: &FaultDecision);
 }
 
 impl FaultEngine {

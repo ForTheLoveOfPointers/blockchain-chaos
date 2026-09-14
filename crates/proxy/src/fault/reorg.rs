@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
 const UNSET: u64 = u64::MAX;
@@ -202,6 +203,44 @@ impl ReorgHandle {
             Ok(_) => fork,
             Err(existing) => existing,
         }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct ReorgView {
+    seed: u64,
+    depth: u64,
+    remove_logs: bool,
+    drop_transactions: bool,
+    fork_point: Option<u64>,
+}
+
+impl Serialize for ReorgHandle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        ReorgView {
+            seed: self.0.seed,
+            depth: self.0.depth,
+            remove_logs: self.0.remove_logs,
+            drop_transactions: self.0.drop_transactions,
+            fork_point: self.pinned(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ReorgHandle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let view = ReorgView::deserialize(deserializer)?;
+        let handle = ReorgHandle::new(
+            view.seed,
+            view.depth,
+            view.remove_logs,
+            view.drop_transactions,
+        );
+        if let Some(fork) = view.fork_point {
+            handle.0.fork_point.store(fork, Ordering::Relaxed);
+        }
+        Ok(handle)
     }
 }
 

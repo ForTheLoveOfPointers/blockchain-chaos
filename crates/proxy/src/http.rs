@@ -26,10 +26,16 @@ pub async fn http_handler(
 async fn forward(state: &AppState, body: Bytes) -> Response {
     let view = RpcView::parse(&body);
 
-    match state.fault.decide(&FaultContext {
+    let ctx = FaultContext {
         transport: Transport::Http,
         view: &view,
-    }) {
+    };
+    let decision = state.fault.decide(&ctx);
+    if let Some(observer) = &state.fault_observer {
+        observer.on_decision(&ctx, &decision);
+    }
+
+    match decision {
         FaultDecision::Pass => {}
         FaultDecision::Delay(d) => {
             info!(target: "chain_chaos::fault", rpc = %view.summary(), delay_ms = d.as_millis(), "injecting latency");

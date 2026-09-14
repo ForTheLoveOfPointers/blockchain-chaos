@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use chain_chaos_proxy::{AppState, ClusterConfig, FileConfig, Observations, ProxyConfig};
 use chain_chaos_scenario::{evaluate_timeline, resolve_seed, Assertion, Ground, Scenario};
 use clap::{Parser, Subcommand};
+use observability::{config::ObservabilityEngineConfig, engine::ObservabilityEngine};
 use tracing::info;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
@@ -87,6 +88,11 @@ struct RunArgs {
     /// Override the scenario's seed (for a fresh random sequence).
     #[arg(long)]
     seed: Option<u64>,
+
+    /// Optional TOML config for the observability engine (see
+    /// `examples/observability.toml`). Defaults to the built-in defaults.
+    #[arg(long)]
+    observability_config: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -122,6 +128,11 @@ struct TestArgs {
     /// Override the scenario's seed.
     #[arg(long)]
     seed: Option<u64>,
+
+    /// Optional TOML config for the observability engine (see
+    /// `examples/observability.toml`). Defaults to the built-in defaults.
+    #[arg(long)]
+    observability_config: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -199,7 +210,10 @@ async fn run_scenario(args: RunArgs) -> Result<()> {
         args.log_bodies,
     )?;
     let engine = Arc::new(timeline.build_engine());
-    let state = AppState::with_engine(cfg, engine.clone())?;
+    let obs_cfg = load_observability_config(args.observability_config.as_ref())?;
+    let observability = Arc::new(ObservabilityEngine::new(obs_cfg));
+    let state =
+        AppState::with_engine(cfg, engine.clone())?.with_fault_observer(observability.clone());
 
     tokio::spawn(chain_chaos_scenario::drive(engine, timeline));
 
@@ -240,7 +254,11 @@ async fn run_test(args: TestArgs) -> Result<bool> {
     )?;
     let engine = Arc::new(timeline.build_engine());
     let obs = Arc::new(Observations::new());
-    let state = AppState::with_engine(cfg, engine.clone())?.with_observations(obs.clone());
+    let obs_cfg = load_observability_config(args.observability_config.as_ref())?;
+    let observability = Arc::new(ObservabilityEngine::new(obs_cfg));
+    let state = AppState::with_engine(cfg, engine.clone())?
+        .with_observations(obs.clone())
+        .with_fault_observer(observability.clone());
 
     // The catch-up window closes at `recover_at + within`; read the upstream tip
     // then, not at the end of the run, so `catches_up` compares against the head
@@ -371,6 +389,20 @@ async fn run_cluster(args: ClusterArgs) -> Result<()> {
         cfg.seed = Some(seed);
     }
     chain_chaos_proxy::run_cluster(cfg).await
+}
+
+/// Load the observability engine config from a TOML file, or fall back to the
+/// built-in defaults when no `--observability-config` was given.
+fn load_observability_config(path: Option<&PathBuf>) -> Result<ObservabilityEngineConfig> {
+    match path {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("reading observability config {}", path.display()))?;
+            toml::from_str(&text)
+                .with_context(|| format!("parsing observability config {}", path.display()))
+        }
+        None => Ok(ObservabilityEngineConfig::default()),
+    }
 }
 
 fn load_scenario(path: &PathBuf) -> Result<Scenario> {

@@ -1,0 +1,25 @@
+# Example observability engine config.
+#
+#   chain-chaos run   scenarios/<name>.yaml --upstream http://127.0.0.1:8545 \
+#       --observability-config examples/observability.toml
+#   chain-chaos test  scenarios/<name>.yaml --upstream http://127.0.0.1:8545 \
+#       --observability-config examples/observability.toml
+#
+# Every fault decision the proxy makes is recorded here and pushed to the
+# configured exporters. Omit `--observability-config` to use these same
+# defaults built in.
+
+# Master switch. When false, the engine records nothing (zero overhead).
+enabled = true
+
+# Minimum level to record. One of: Trace, Debug, Info, Warn, Error.
+# Events below this level are dropped before buffering.
+level = "Info"
+
+# Ring-buffer capacity (events). Once full, the oldest event is dropped to make
+# room for the newest, so memory stays bounded during long runs.
+buffer = 1024
+
+# Exporters (sinks) to fan each recorded event out to. Unknown names are
+# skipped with a warning. Currently supported: "json-stdout".
+exporter = ["json-stdout"]
