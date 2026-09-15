@@ -8,7 +8,10 @@ pub mod reorg;
 pub mod rng;
 pub mod rule;
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,6 +30,7 @@ pub struct FaultEngine {
     rules: std::sync::RwLock<Vec<Rule>>,
     rng: FaultRng,
     request_counters: std::sync::Mutex<BTreeMap<String, u64>>,
+    lru_tracker: std::sync::Mutex<VecDeque<String>>,
 }
 
 impl std::fmt::Debug for FaultEngine {
@@ -64,6 +68,7 @@ impl FaultEngine {
             rules: std::sync::RwLock::new(rules),
             rng: FaultRng::from_seed(seed),
             request_counters: std::sync::Mutex::new(BTreeMap::new()),
+            lru_tracker: std::sync::Mutex::new(VecDeque::new()),
         }
     }
 
@@ -137,9 +142,19 @@ impl FaultEngine {
     fn request_key(&self, ctx: &FaultContext) -> String {
         let base = format!("{:?}:{}", ctx.transport, ctx.view.stable_key());
         let mut counters = self.request_counters.lock().unwrap();
+        let mut tracker = self.lru_tracker.lock().unwrap();
+
         if !counters.contains_key(&base) && counters.len() >= MAX_TRACKED_REQUEST_KEYS {
-            counters.pop_first();
+            let lru_key = tracker.pop_front().unwrap();
+            counters.remove(&lru_key);
         }
+
+        // Update the lru tracker if the key is in it - make it the hottest key
+        if let Some(idx) = tracker.iter().position(|x| x == &base) {
+            tracker.remove(idx);
+        }
+        tracker.push_back(base.clone());
+
         let counter = counters.entry(base.clone()).or_default();
         let key = format!("{base}#{counter}");
         *counter += 1;
