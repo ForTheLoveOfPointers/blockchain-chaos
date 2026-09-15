@@ -201,8 +201,8 @@ fn main() -> Result<()> {
             let seed = resolve_seed(args.seed, &scenario);
             let timeline = scenario.compile(seed).context("compiling scenario")?;
             if args.json {
-                let json = serde_json::to_string_pretty(&timeline)
-                    .context("serializing timeline")?;
+                let json =
+                    serde_json::to_string_pretty(&timeline).context("serializing timeline")?;
                 println!("{json}");
             } else {
                 print!("{}", timeline.describe());

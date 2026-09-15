@@ -54,8 +54,7 @@ assertions:
   - head_monotonic
 ",
         );
-        let json: serde_json::Value =
-            serde_json::to_value(&t).expect("timeline serializes");
+        let json: serde_json::Value = serde_json::to_value(&t).expect("timeline serializes");
 
         // Top-level identity and seed are preserved.
         assert_eq!(json["name"], "s");
@@ -63,7 +62,10 @@ assertions:
 
         // The compiled fault schedule is captured: the reject rule and its matcher.
         let step0 = &json["steps"][0];
-        assert_eq!(step0["active"][0]["matcher"]["methods"][0], "eth_blockNumber");
+        assert_eq!(
+            step0["active"][0]["matcher"]["methods"][0],
+            "eth_blockNumber"
+        );
         assert_eq!(step0["active"][0]["action"]["Reject"]["http_status"], 503);
 
         // The recover step clears active rules, and assertions round-trip by name.
