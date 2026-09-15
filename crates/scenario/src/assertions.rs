@@ -19,7 +19,7 @@ const DEFAULT_WITHIN: Duration = Duration::from_secs(5);
 const CATCH_UP_SLACK: u64 = 1;
 
 /// A parsed, validated assertion ready to evaluate.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Assertion {
     /// The delivered head never jumps backward.
     HeadMonotonic,

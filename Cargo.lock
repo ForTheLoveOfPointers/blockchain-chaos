@@ -258,6 +258,7 @@ dependencies = [
  "chain-chaos-proxy",
  "humantime",
  "serde",
+ "serde_json",
  "serde_yaml",
  "thiserror",
  "tokio",

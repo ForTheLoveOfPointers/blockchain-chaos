@@ -164,6 +164,11 @@ struct InspectArgs {
     /// Override the scenario's seed before printing.
     #[arg(long)]
     seed: Option<u64>,
+
+    /// Emit the compiled timeline as JSON (the serialized fault schedule)
+    /// instead of the human-readable description.
+    #[arg(long)]
+    json: bool,
 }
 
 fn main() -> Result<()> {
@@ -195,7 +200,13 @@ fn main() -> Result<()> {
             let scenario = load_scenario(&args.scenario)?;
             let seed = resolve_seed(args.seed, &scenario);
             let timeline = scenario.compile(seed).context("compiling scenario")?;
-            print!("{}", timeline.describe());
+            if args.json {
+                let json =
+                    serde_json::to_string_pretty(&timeline).context("serializing timeline")?;
+                println!("{json}");
+            } else {
+                print!("{}", timeline.describe());
+            }
         }
     }
     Ok(())
