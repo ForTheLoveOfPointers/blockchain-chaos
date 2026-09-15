@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/social-preview.png" alt="chain-chaos — deterministic chaos testing for blockchain infrastructure" width="100%">
+</p>
+
 # chain-chaos
 
 [![CI](https://github.com/ForTheLoveOfPointers/blockchain-chaos/actions/workflows/ci.yml/badge.svg)](https://github.com/ForTheLoveOfPointers/blockchain-chaos/actions/workflows/ci.yml)
