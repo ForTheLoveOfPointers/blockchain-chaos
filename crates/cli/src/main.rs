@@ -9,6 +9,7 @@ use chain_chaos_proxy::{AppState, ClusterConfig, FileConfig, Observations, Proxy
 use chain_chaos_scenario::{evaluate_timeline, resolve_seed, Assertion, Ground, Scenario};
 use clap::{Parser, Subcommand};
 use observability::{config::ObservabilityEngineConfig, engine::ObservabilityEngine};
+use serde_json::{json, Value};
 use tracing::info;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
@@ -129,6 +130,15 @@ struct TestArgs {
     #[arg(long)]
     seed: Option<u64>,
 
+    /// Directory for run artifacts (report.json). Written on failure; add
+    /// `--always` to write on a clean pass too.
+    #[arg(long, default_value = "failure/")]
+    out: Option<PathBuf>,
+
+    /// Write artifacts even when every assertion passes (default: only on failure).
+    #[arg(long)]
+    always: bool,
+
     /// Optional TOML config for the observability engine (see
     /// `examples/observability.toml`). Defaults to the built-in defaults.
     #[arg(long)]
@@ -226,6 +236,8 @@ async fn run_scenario(args: RunArgs) -> Result<()> {
 async fn run_test(args: TestArgs) -> Result<bool> {
     let scenario = load_scenario(&args.scenario)?;
     let seed = resolve_seed(args.seed, &scenario);
+    let output_path = args.out.unwrap();
+    let always_write = args.always;
     let timeline = scenario.compile(seed).context("compiling scenario")?;
 
     if timeline.assertions.is_empty() {
@@ -324,6 +336,22 @@ async fn run_test(args: TestArgs) -> Result<bool> {
     server.abort();
 
     let all_passed = report(&timeline.name, seed, upstream_head, &outcomes);
+
+    if should_write_artifacts(all_passed, always_write) {
+        let heads = obs.heads();
+        let deliveries = obs.deliveries();
+        let report_json = build_report_json(
+            &timeline.name,
+            seed,
+            upstream_head,
+            &outcomes,
+            &heads,
+            &deliveries,
+        );
+        let path = write_artifacts(&output_path, &report_json)?;
+        println!("Artifacts written to {}", path.display());
+    }
+
     Ok(all_passed)
 }
 
@@ -379,6 +407,56 @@ fn report(
         );
     }
     failed == 0
+}
+
+fn build_report_json(
+    scenario: &str,
+    seed: u64,
+    upstream_head: Option<u64>,
+    outcomes: &[chain_chaos_scenario::AssertionOutcome],
+    heads: &[(std::time::Duration, u64)],
+    deliveries: &[chain_chaos_proxy::observe::Delivery],
+) -> Value {
+    let passed = outcomes.iter().all(|o| o.passed);
+
+    let assertions: Vec<Value> = outcomes
+        .iter()
+        .map(|x| json!({"name": x.name, "passed": x.passed, "detail": x.detail }))
+        .collect();
+
+    let heads_json: Vec<Value> = heads
+        .iter()
+        .map(|x| json!({"at_ms": x.0.as_millis(), "head": x.1 }))
+        .collect();
+
+    let deliveries_json: Vec<Value> = deliveries.iter().map(|x| json!({"at_ms": x.at.as_millis(), "method": x.method, "faulted": x.faulted, "ok": x.ok})).collect();
+
+    serde_json::json!({
+        "scenario": scenario,
+        "seed": seed,
+        "upstream_head": upstream_head,
+        "passed": passed,
+        "assertions": assertions,
+        "observed": {
+            "heads": heads_json,
+            "deliveries": deliveries_json,
+        },
+    })
+}
+
+/// Artifact-writing policy: always on failure, and on a clean pass only when
+/// `--always` was given.
+fn should_write_artifacts(all_passed: bool, always: bool) -> bool {
+    !all_passed || always
+}
+
+fn write_artifacts(out: &std::path::Path, report: &Value) -> Result<PathBuf> {
+    std::fs::create_dir_all(out)
+        .with_context(|| format!("creating artifact dir {}", out.display()))?;
+    let text = serde_json::to_string_pretty(report).context("serializing report.json")?;
+    let path = out.join("report.json");
+    std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+    Ok(path)
 }
 
 async fn run_cluster(args: ClusterArgs) -> Result<()> {
@@ -465,5 +543,103 @@ fn init_tracing(json: bool) {
         registry
             .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
             .init();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chain_chaos_proxy::observe::Delivery;
+    use chain_chaos_scenario::AssertionOutcome;
+    use std::time::Duration;
+
+    fn sample_report() -> Value {
+        let outcomes = vec![
+            AssertionOutcome {
+                name: "head_monotonic".to_string(),
+                passed: false,
+                detail: "head went 1230 -> 1228".to_string(),
+            },
+            AssertionOutcome {
+                name: "catches_up".to_string(),
+                passed: true,
+                detail: "reached upstream tip".to_string(),
+            },
+        ];
+        let heads = vec![(Duration::from_millis(120), 1230u64)];
+        let deliveries = vec![Delivery {
+            at: Duration::from_millis(95),
+            method: Some("eth_blockNumber".to_string()),
+            faulted: false,
+            ok: true,
+        }];
+        build_report_json(
+            "stale-head-trap",
+            42,
+            Some(1234),
+            &outcomes,
+            &heads,
+            &deliveries,
+        )
+    }
+
+    #[test]
+    fn report_records_head_monotonic_failure() {
+        let report = sample_report();
+
+        // A failing assertion flips the top-level summary.
+        assert_eq!(report["passed"], Value::Bool(false));
+
+        // The head_monotonic outcome is recorded as failed.
+        let assertions = report["assertions"].as_array().unwrap();
+        let hm = assertions
+            .iter()
+            .find(|a| a["name"] == "head_monotonic")
+            .expect("head_monotonic recorded");
+        assert_eq!(hm["passed"], Value::Bool(false));
+
+        // Observed wire data uses consistent `at_ms` keys.
+        assert_eq!(report["observed"]["heads"][0]["at_ms"], 120);
+        assert_eq!(report["observed"]["deliveries"][0]["at_ms"], 95);
+        assert_eq!(
+            report["observed"]["deliveries"][0]["method"],
+            "eth_blockNumber"
+        );
+    }
+
+    #[test]
+    fn artifact_policy_matches_flag() {
+        // Failure always writes, regardless of --always.
+        assert!(should_write_artifacts(false, false));
+        assert!(should_write_artifacts(false, true));
+        // A clean pass writes only when --always is set.
+        assert!(!should_write_artifacts(true, false));
+        assert!(should_write_artifacts(true, true));
+    }
+
+    #[test]
+    fn write_artifacts_creates_report_file() {
+        let report = sample_report();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("chain-chaos-artifacts-{nanos}"));
+
+        let path = write_artifacts(&dir, &report).expect("artifacts written");
+
+        assert!(
+            path.exists(),
+            "report.json should exist at {}",
+            path.display()
+        );
+        assert_eq!(path.file_name().unwrap(), "report.json");
+
+        // Round-trips as valid JSON preserving the failure.
+        let text = std::fs::read_to_string(&path).unwrap();
+        let parsed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["passed"], Value::Bool(false));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
