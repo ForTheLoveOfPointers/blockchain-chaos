@@ -8,7 +8,10 @@ pub mod reorg;
 pub mod rng;
 pub mod rule;
 
-use std::{collections::{BTreeMap, VecDeque}, mem::transmute, time::Duration};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,7 +30,7 @@ pub struct FaultEngine {
     rules: std::sync::RwLock<Vec<Rule>>,
     rng: FaultRng,
     request_counters: std::sync::Mutex<BTreeMap<String, u64>>,
-    lru_tracker: std::sync::Mutex<VecDeque<String>>
+    lru_tracker: std::sync::Mutex<VecDeque<String>>,
 }
 
 impl std::fmt::Debug for FaultEngine {
@@ -65,7 +68,7 @@ impl FaultEngine {
             rules: std::sync::RwLock::new(rules),
             rng: FaultRng::from_seed(seed),
             request_counters: std::sync::Mutex::new(BTreeMap::new()),
-            lru_tracker: std::sync::Mutex::new(VecDeque::new())
+            lru_tracker: std::sync::Mutex::new(VecDeque::new()),
         }
     }
 
@@ -145,7 +148,7 @@ impl FaultEngine {
             let lru_key = tracker.pop_front().unwrap();
             counters.remove(&lru_key);
         }
-        
+
         // Update the lru tracker if the key is in it - make it the hottest key
         if let Some(idx) = tracker.iter().position(|x| x == &base) {
             tracker.remove(idx);
