@@ -42,6 +42,36 @@ mod tests {
     }
 
     #[test]
+    fn compiled_timeline_serializes_to_json() {
+        let t = compile(
+            "name: s
+events:
+  - after: 3s
+    reject: { methods: [eth_blockNumber], http_status: 503, message: down }
+  - after: 8s
+    recover: true
+assertions:
+  - head_monotonic
+",
+        );
+        let json: serde_json::Value =
+            serde_json::to_value(&t).expect("timeline serializes");
+
+        // Top-level identity and seed are preserved.
+        assert_eq!(json["name"], "s");
+        assert_eq!(json["seed"], 7);
+
+        // The compiled fault schedule is captured: the reject rule and its matcher.
+        let step0 = &json["steps"][0];
+        assert_eq!(step0["active"][0]["matcher"]["methods"][0], "eth_blockNumber");
+        assert_eq!(step0["active"][0]["action"]["Reject"]["http_status"], 503);
+
+        // The recover step clears active rules, and assertions round-trip by name.
+        assert!(json["steps"][1]["active"].as_array().unwrap().is_empty());
+        assert_eq!(json["assertions"][0], "HeadMonotonic");
+    }
+
+    #[test]
     fn empty_scenario_has_no_steps() {
         let t = compile("name: empty\n");
         assert!(t.steps.is_empty());

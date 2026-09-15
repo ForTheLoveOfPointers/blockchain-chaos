@@ -14,7 +14,7 @@ pub enum Transport {
     Ws,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Rule {
     pub name: Option<String>,
     pub matcher: Matcher,
@@ -22,13 +22,13 @@ pub struct Rule {
     pub action: Action,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Matcher {
     pub methods: Option<Vec<String>>,
     pub transport: TransportMatch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TransportMatch {
     Http,
     Ws,

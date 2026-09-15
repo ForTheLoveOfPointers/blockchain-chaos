@@ -8,6 +8,7 @@ use std::time::Duration;
 use chain_chaos_proxy::fault::{
     Action, DelaySpec, FaultEngine, Matcher, RejectSpec, ReorgHandle, Rule, TransportMatch,
 };
+use serde::Serialize;
 use tokio::time::Instant;
 use tracing::info;
 
@@ -17,7 +18,7 @@ use crate::config::{
 };
 use crate::ScenarioError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Timeline {
     pub name: String,
     pub seed: u64,
@@ -28,7 +29,7 @@ pub struct Timeline {
     pub recover_at: Option<Duration>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Step {
     pub at: Duration,
     pub active: Vec<Rule>,
