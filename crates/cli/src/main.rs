@@ -6,7 +6,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use chain_chaos_proxy::{AppState, ClusterConfig, FileConfig, Observations, ProxyConfig};
-use chain_chaos_scenario::{evaluate_timeline, resolve_seed, Assertion, Ground, Scenario};
+use chain_chaos_scenario::{
+    evaluate_timeline, resolve_seed, Assertion, Ground, Scenario, Timeline,
+};
 use clap::{Parser, Subcommand};
 use observability::{config::ObservabilityEngineConfig, engine::ObservabilityEngine};
 use serde_json::{json, Value};
@@ -359,11 +361,31 @@ async fn run_test(args: TestArgs) -> Result<bool> {
             &heads,
             &deliveries,
         );
-        let path = write_artifacts(&output_path, &report_json)?;
+        let timeline_json: Value = build_timeline_json(timeline);
+
+        let path = write_artifacts(&output_path, &report_json, &timeline_json)?;
         println!("Artifacts written to {}", path.display());
     }
 
     Ok(all_passed)
+}
+
+fn build_timeline_json(timeline: Timeline) -> Value {
+    let timeline_steps: Vec<Value> = timeline
+        .steps
+        .iter()
+        .map(|s| serde_json::json!({"at": s.at.as_millis(), "active": &s.active, "summary": &s.summary }))
+        .collect();
+
+    let timeline_recover = timeline.recover_at.map(|x| x.as_millis());
+
+    serde_json::json!({
+        "name": timeline.name,
+        "seed": timeline.seed,
+        "recover_at": timeline_recover,
+        "steps": timeline_steps,
+        "assertions": timeline.assertions,
+    })
 }
 
 fn spawn_app(cmd: &str, proxy_url: &str) -> Result<tokio::process::Child> {
@@ -461,12 +483,18 @@ fn should_write_artifacts(all_passed: bool, always: bool) -> bool {
     !all_passed || always
 }
 
-fn write_artifacts(out: &std::path::Path, report: &Value) -> Result<PathBuf> {
+fn write_artifacts(out: &std::path::Path, report: &Value, timeline: &Value) -> Result<PathBuf> {
     std::fs::create_dir_all(out)
         .with_context(|| format!("creating artifact dir {}", out.display()))?;
-    let text = serde_json::to_string_pretty(report).context("serializing report.json")?;
+    let text_report = serde_json::to_string_pretty(report).context("serializing report.json")?;
+    let text_timeline =
+        serde_json::to_string_pretty(timeline).context("serializing timeline.json")?;
     let path = out.join("report.json");
-    std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+    std::fs::write(&path, text_report).with_context(|| format!("writing {}", path.display()))?;
+    let timeline_path = out.join("timeline.json");
+    std::fs::write(&timeline_path, text_timeline)
+        .with_context(|| format!("writing {}", timeline_path.display()))?;
+
     Ok(path)
 }
 
@@ -560,8 +588,10 @@ fn init_tracing(json: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chain_chaos_proxy::fault::{Action, DelaySpec, Matcher, Rule, TransportMatch};
     use chain_chaos_proxy::observe::Delivery;
     use chain_chaos_scenario::AssertionOutcome;
+    use chain_chaos_scenario::Step;
     use std::time::Duration;
 
     fn sample_report() -> Value {
@@ -592,6 +622,36 @@ mod tests {
             &heads,
             &deliveries,
         )
+    }
+
+    fn sample_timeline() -> Timeline {
+        let rule = Rule {
+            name: Some("delay-http".to_string()),
+            matcher: Matcher {
+                methods: Some(vec!["eth_blockNumber".to_string()]),
+                transport: TransportMatch::Http,
+            },
+            probability: 1.0,
+            action: Action::Delay(DelaySpec::Fixed(Duration::from_millis(200))),
+        };
+        Timeline {
+            name: "stale-head-trap".to_string(),
+            seed: 42,
+            steps: vec![
+                Step {
+                    at: Duration::ZERO,
+                    active: vec![],
+                    summary: "startup pass-through".to_string(),
+                },
+                Step {
+                    at: Duration::from_millis(120),
+                    active: vec![rule],
+                    summary: "delay eth_blockNumber".to_string(),
+                },
+            ],
+            assertions: vec![Assertion::HeadMonotonic],
+            recover_at: Some(Duration::from_millis(500)),
+        }
     }
 
     #[test]
@@ -631,13 +691,14 @@ mod tests {
     #[test]
     fn write_artifacts_creates_report_file() {
         let report = sample_report();
+        let timeline = build_timeline_json(sample_timeline());
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let dir = std::env::temp_dir().join(format!("chain-chaos-artifacts-{nanos}"));
 
-        let path = write_artifacts(&dir, &report).expect("artifacts written");
+        let path = write_artifacts(&dir, &report, &timeline).expect("artifacts written");
 
         assert!(
             path.exists(),
@@ -650,6 +711,20 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         let parsed: Value = serde_json::from_str(&text).unwrap();
         assert_eq!(parsed["passed"], Value::Bool(false));
+
+        // The timeline is written to its own file, not clobbering report.json.
+        let timeline_path = dir.join("timeline.json");
+        assert!(
+            timeline_path.exists(),
+            "timeline.json should exist at {}",
+            timeline_path.display()
+        );
+        let text = std::fs::read_to_string(&timeline_path).unwrap();
+        let parsed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["name"], "stale-head-trap");
+        assert_eq!(parsed["seed"], 42);
+        assert_eq!(parsed["recover_at"], 500);
+        assert_eq!(parsed["steps"][1]["at"], 120);
 
         std::fs::remove_dir_all(&dir).ok();
     }
